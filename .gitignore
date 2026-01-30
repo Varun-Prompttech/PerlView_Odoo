@@ -1,0 +1,22 @@
+# Odoo
+*.pyc
+__pycache__/
+*.log
+
+# Odoo Folders
+odoo18/filestore/
+odoo18/logs/
+odoo18/.venv/
+.venv/
+venv/
+env/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
