@@ -135,87 +135,110 @@ class OmaPaymentController(http.Controller):
 
     def _call_oma_ecr_api(self, payment_method, amount, pos_order):
         """
-        Call OMA ECR API to process payment.
+        Call OMA ECR API to process payment via OMAService.
         """
-        try:
-            api_endpoint = payment_method.oma_api_endpoint
-            merchant_id = payment_method.oma_merchant_id
-            terminal_id = payment_method.oma_terminal_id
-            client_id = payment_method.oma_client_id
-            api_key = payment_method.oma_api_key
+        from odoo.addons.pos_payment_oma.services.oma_service import OMAService
 
-            # 1. Validation: Fail if not configured
-            if not all([api_endpoint, merchant_id, terminal_id]):
+        try:
+            # 1. Validation requirements
+            required_fields = [
+                payment_method.oma_api_endpoint,
+                payment_method.oma_merchant_id,
+                payment_method.oma_terminal_id,
+                payment_method.oma_api_key,
+                payment_method.oma_aes_key,
+                payment_method.oma_key_version,
+                payment_method.oma_institute,
+                payment_method.oma_serial_number
+            ]
+
+            if not all(required_fields):
                 _logger.warning("OMA terminal not fully configured for Payment Method %s", payment_method.name)
                 return {
                     'success': False,
-                    'error': 'ECR Terminal configuration missing (Endpoint/Merchant/Terminal ID).',
-                    'detail': 'Please configure OMA settings in Odoo.'
+                    'error': 'ECR Terminal configuration missing (Endpoint/Keys/IDs).',
+                    'detail': 'Check API Key, AES Key, Key Version, Institute, Serial Number.'
                 }
 
-            # Prepare ECR request payload
-            # Amount should be in cents (e.g. 10.50 -> 1050)
-            amount_cents = int(round(amount * 100))
-            
-            payload = {
-                'merchantId': merchant_id,
-                'terminalId': terminal_id,
-                'clientId': client_id or "",
-                'amount': amount_cents,
-                'currency': pos_order.currency_id.name or 'AED',
-                'referenceNo': str(pos_order.pos_reference or pos_order.id),
-                'transactionType': 'SALE', 
-            }
-
-            headers = {
-                'Content-Type': 'application/json',
-            }
-            if api_key:
-                headers['Authorization'] = f'Bearer {api_key}'
-
-            _logger.info("Calling OMA ECR API: %s with payload %s", api_endpoint, payload)
-            
-            # Make the API call
-            # Using a shorter timeout for connection, but reasonable for read
-            response = requests.post(
-                f"{api_endpoint}/sale",  # Adjust endpoint suffix if needed based on specific OMA docs
-                json=payload,
-                headers=headers,
-                timeout=(10, 120) 
+            # Instantiate Service
+            service = OMAService(
+                api_endpoint=payment_method.oma_api_endpoint,
+                merchant_id=payment_method.oma_merchant_id,
+                api_key=payment_method.oma_api_key,
+                aes_key=payment_method.oma_aes_key,
+                terminal_id=payment_method.oma_terminal_id,
+                key_version=payment_method.oma_key_version,
+                institute=payment_method.oma_institute,
+                serial_number=payment_method.oma_serial_number
             )
 
-            _logger.info("OMA ECR Response: %s", response.text)
+            # Initiate Transaction
+            client_ref = pos_order.pos_reference or f"ORDER-{pos_order.id}"
+            _logger.info("Initiating OMA Transaction for Ref: %s", client_ref)
+            
+            result = service.initiate_transaction(amount, client_ref)
 
-            if response.status_code == 200:
-                result = response.json()
-                # Check specific OMA success codes. Assuming '00' is success based on common ISO8583 patterns
-                # Adjust 'responseCode' key based on actual API doc if different
-                if result.get('responseCode') == '00' or result.get('success') is True: 
-                    return {
-                        'success': True,
-                        'transaction_id': result.get('transactionId') or result.get('rrn'),
-                        'approval_code': result.get('approvalCode'),
-                        'message': 'Payment approved'
-                    }
-                else:
-                    error_msg = result.get('responseMessage') or result.get('message') or 'Declined by terminal (Unknown Reason)'
-                    return {
-                        'success': False,
-                        'error': error_msg
-                    }
+            # Handle Result
+            if result.get('omaErrorCode') == '000':
+                # Message says "Transaction initiated..." so we must poll
+                # Wait for completion
+                _logger.info("OMA Initiation Success. Polling for status...")
+                mw_request_id = result.get('omaTxnMwRequestId')
+                if not mw_request_id:
+                     # Some implementations might return success immediately w/o MW ID?
+                     # If so check status msg
+                     if result.get('omaIsTransactionSuccess') == 'true':
+                         return {
+                            'success': True,
+                            'transaction_id': result.get('omaTxnMwRequestId') or 'N/A',
+                            'message': 'Payment approved'
+                        }
+                
+                return self._poll_transaction_status(service, client_ref, mw_request_id)
             else:
+                error_msg = result.get('omaErrorMessage') or 'Unknown Error'
                 return {
                     'success': False,
-                    'error': f'Terminal Communication Error (Status {response.status_code})'
+                    'error': f"Initiation Failed: {error_msg}"
                 }
 
-        except requests.Timeout:
-            return {'success': False, 'error': 'Timeout: Terminal did not respond in time.'}
-        except requests.ConnectionError:
-            return {'success': False, 'error': 'Connection Failed: Could not reach payment terminal.'}
         except Exception as e:
             _logger.exception("OMA ECR Error: %s", str(e))
             return {'success': False, 'error': f'System Error: {str(e)}'}
+
+    def _poll_transaction_status(self, service, client_ref, mw_request_id):
+        """Poll the inquiry API until success, failure, or timeout."""
+        import time
+        # Poll for 120 seconds (20 * 6s) to allow customer interaction
+        # Kiosk UI timeout is usually higher? 
+        # Standard POS timeout is 30-60s. Let's do 60s (20 * 3s)
+        max_retries = 30
+        for _ in range(max_retries):
+            time.sleep(2)
+            try:
+                status_result = service.check_status(client_ref, mw_request_id)
+                _logger.info("OMA Poll Status: %s", status_result)
+
+                if status_result.get('omaErrorCode') == '000':
+                    status_msg = status_result.get('omaTransactionStatusMsg')
+                    
+                    if status_msg == 'TRANSACTION_SUCCESS' or status_result.get('omaIsTransactionSuccess') == 'true':
+                         return {
+                            'success': True,
+                            'transaction_id': mw_request_id,
+                            'message': 'Payment approved'
+                        }
+                    elif status_msg in ['DECLINED', 'CANCELLED_BY_CLIENT', 'TIMEOUT', 'FAILED']:
+                        return {
+                            'success': False,
+                            'error': f'Transaction {status_msg}'
+                        }
+                    # If PENDING or similar (often just empty or specific code), continue
+            except Exception as e:
+                _logger.warning("Polling error: %s", e)
+                # Continue polling even if one request fails
+        
+        return {'success': False, 'error': 'Payment Timed Out (No response from terminal)'}
 
     def _create_payment_and_complete(self, pos_order, payment_method, amount, ecr_result):
         """Create payment for the order and validate it."""

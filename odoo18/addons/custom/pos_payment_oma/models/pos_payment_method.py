@@ -42,7 +42,19 @@ class PosPaymentMethod(models.Model):
     )
     oma_aes_key = fields.Char(
         string='AES Key',
-        help='AES-256 encryption key for payload encryption'
+        help='AES-256 encryption key provided by OSH'
+    )
+    oma_key_version = fields.Char(
+        string='Key Version',
+        help='Version of the encryption key (e.g., 00e2f47b-2cfb...)'
+    )
+    oma_institute = fields.Char(
+        string='Institute',
+        help='Bank Name (e.g., Bank)'
+    )
+    oma_serial_number = fields.Char(
+        string='Serial Number',
+        help='Serial Number of the POS device'
     )
 
     @api.model
