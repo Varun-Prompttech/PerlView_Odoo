@@ -145,31 +145,29 @@ class OmaPaymentController(http.Controller):
                 payment_method.oma_api_endpoint,
                 payment_method.oma_merchant_id,
                 payment_method.oma_terminal_id,
-                payment_method.oma_api_key,
-                payment_method.oma_aes_key,
                 payment_method.oma_key_version,
                 payment_method.oma_institute,
-                payment_method.oma_serial_number
+                payment_method.oma_serial_number,
+                payment_method.oma_secret_key
             ]
 
             if not all(required_fields):
                 _logger.warning("OMA terminal not fully configured for Payment Method %s", payment_method.name)
                 return {
                     'success': False,
-                    'error': 'ECR Terminal configuration missing (Endpoint/Keys/IDs).',
-                    'detail': 'Check API Key, AES Key, Key Version, Institute, Serial Number.'
+                    'error': 'ECR Terminal configuration missing.',
+                    'detail': 'Check API Endpoint, Merchant ID, Terminal ID, Key Version, Institute, Serial Number, Secret Key.'
                 }
 
             # Instantiate Service
             service = OMAService(
                 api_endpoint=payment_method.oma_api_endpoint,
                 merchant_id=payment_method.oma_merchant_id,
-                api_key=payment_method.oma_api_key,
-                aes_key=payment_method.oma_aes_key,
                 terminal_id=payment_method.oma_terminal_id,
                 key_version=payment_method.oma_key_version,
                 institute=payment_method.oma_institute,
-                serial_number=payment_method.oma_serial_number
+                serial_number=payment_method.oma_serial_number,
+                secret_key=payment_method.oma_secret_key
             )
 
             # Initiate Transaction

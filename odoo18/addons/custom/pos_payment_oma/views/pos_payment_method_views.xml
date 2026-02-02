@@ -16,9 +16,7 @@
                         <field name="oma_terminal_id" placeholder="Terminal ID"/>
                     </group>
                     <group>
-                        <field name="oma_client_id" placeholder="Client ID"/>
-                        <field name="oma_api_key" placeholder="API Key"/>
-                        <field name="oma_aes_key" placeholder="AES Key" password="True"/>
+                        <field name="oma_secret_key" placeholder="Secret Key" password="True"/>
                         <field name="oma_key_version" placeholder="Key Version"/>
                         <field name="oma_institute" placeholder="Institute"/>
                         <field name="oma_serial_number" placeholder="Serial Number"/>

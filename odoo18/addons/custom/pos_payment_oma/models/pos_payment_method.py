@@ -32,17 +32,9 @@ class PosPaymentMethod(models.Model):
         string='Terminal ID (TID)',
         help='Terminal ID of the ECR device'
     )
-    oma_client_id = fields.Char(
-        string='Client ID',
-        help='Client ID for ECR identification'
-    )
-    oma_api_key = fields.Char(
-        string='API Key',
-        help='API Key from OSH portal'
-    )
-    oma_aes_key = fields.Char(
-        string='AES Key',
-        help='AES-256 encryption key provided by OSH'
+    oma_secret_key = fields.Char(
+        string='Secret Key',
+        help='OMA Secret Key for API authentication (omaSecretKey header)'
     )
     oma_key_version = fields.Char(
         string='Key Version',
