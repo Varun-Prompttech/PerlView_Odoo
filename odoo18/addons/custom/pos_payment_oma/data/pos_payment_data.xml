@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <!-- OMA Payment Method with Test Configuration -->
+        <record id="pos_payment_method_oma_test" model="pos.payment.method">
+            <field name="name">OMA Card (Test)</field>
+            <field name="use_payment_terminal">oma</field>
+            <field name="oma_api_endpoint">https://rps.omaemirates.ae</field>
+            <field name="oma_merchant_id">TEST_MERCHANT_ID</field>
+            <field name="oma_terminal_id">TEST_TERMINAL_ID</field>
+            <field name="oma_client_id">TEST_CLIENT_ID</field>
+            <field name="oma_api_key">TEST_API_KEY_12345</field>
+            <field name="oma_aes_key">TEST_AES_KEY_XYZ</field>
+        </record>
+    </data>
+</odoo>

@@ -1,0 +1,111 @@
+/* OMA Payment Screen Styles */
+
+.oma-payment-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    max-width: 500px;
+    margin: 0 auto;
+}
+
+.oma-timer-circle {
+    width: 180px;
+    height: 180px;
+    border-radius: 50%;
+    border: 6px solid #0d6efd;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(145deg, #ffffff, #f8f9fa);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+    transition: all 0.3s ease;
+}
+
+.oma-timer-circle .timer-inner {
+    text-align: center;
+}
+
+.oma-timer-circle .timer-value {
+    font-family: 'Roboto Mono', monospace;
+    color: #0d6efd;
+}
+
+/* Success state */
+.oma-timer-circle.success {
+    border-color: #198754;
+    background: linear-gradient(145deg, #d1e7dd, #a3cfbb);
+}
+
+/* Error state */
+.oma-timer-circle.error {
+    border-color: #dc3545;
+    background: linear-gradient(145deg, #f8d7da, #f1aeb5);
+    animation: none;
+}
+
+.oma-amount {
+    min-width: 280px;
+    text-align: center;
+    border: 2px solid #dee2e6;
+}
+
+.oma-processing {
+    margin-top: 1rem;
+}
+
+/* Pulse animation for processing */
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(13, 110, 253, 0.4);
+    }
+
+    70% {
+        box-shadow: 0 0 0 15px rgba(13, 110, 253, 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(13, 110, 253, 0);
+    }
+}
+
+.oma-timer-circle:not(.success):not(.error) {
+    animation: pulse 2s infinite;
+}
+
+/* Card icon animation */
+@keyframes card-blink {
+
+    0%,
+    50%,
+    100% {
+        opacity: 1;
+    }
+
+    25%,
+    75% {
+        opacity: 0.6;
+    }
+}
+
+.oma-payment-screen .fa-credit-card {
+    animation: card-blink 1.5s infinite;
+}
+
+/* Error alert styling */
+.oma-payment-screen .alert-danger {
+    max-width: 100%;
+    text-align: left;
+}
+
+/* Success alert styling */
+.oma-payment-screen .alert-success {
+    max-width: 100%;
+    text-align: left;
+}
+
+/* Button styling */
+.oma-payment-screen+.px-3 .btn {
+    min-width: 150px;
+}

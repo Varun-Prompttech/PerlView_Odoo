@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+    <!-- Override PaymentPage template for OMA processing -->
+    <t t-name="pos_payment_oma.PaymentPage" t-inherit="pos_self_order.PaymentPage" t-inherit-mode="extension">
+        <!-- Add OMA processing overlay when processing -->
+        <xpath expr="//div[hasclass('payment-state-container')]" position="replace">
+            <div class="payment-state-container d-flex justify-content-center align-items-center flex-column h-100 px-3 text-center">
+                <!-- OMA Processing Screen -->
+                <t t-if="omaState and (omaState.processing or omaState.error or omaState.success)">
+                    <div class="oma-payment-screen">
+                        <!-- Timer Circle -->
+                        <div t-attf-class="oma-timer-circle mb-4 {{ omaState.success ? 'success' : '' }} {{ omaState.error ? 'error' : '' }}">
+                            <div class="timer-inner">
+                                <!-- Success Icon -->
+                                <t t-if="omaState.success">
+                                    <i class="fa fa-check-circle fa-4x text-success mb-2" aria-hidden="true"/>
+                                </t>
+                                <!-- Error Icon -->
+                                <t t-elif="omaState.error">
+                                    <i class="fa fa-times-circle fa-4x text-danger mb-2" aria-hidden="true"/>
+                                </t>
+                                <!-- Processing Icon with Timer -->
+                                <t t-else="">
+                                    <i class="fa fa-credit-card fa-3x text-primary mb-2" aria-hidden="true"/>
+                                    <div class="timer-value fs-1 fw-bold" t-esc="formatTime(omaState.timer)"/>
+                                </t>
+                            </div>
+                        </div>
+                        
+                        <!-- Status Message -->
+                        <h2 t-attf-class="mb-3 {{ omaState.success ? 'text-success' : '' }} {{ omaState.error ? 'text-danger' : '' }}">
+                            <t t-esc="omaState.message"/>
+                        </h2>
+                        
+                        <!-- Error Details Box -->
+                        <t t-if="omaState.error">
+                            <div class="alert alert-danger d-flex align-items-center mb-4" role="alert">
+                                <i class="fa fa-exclamation-triangle me-3 fs-3"/>
+                                <div>
+                                    <strong>Terminal Error</strong>
+                                    <p class="mb-0 mt-1" t-esc="omaState.message"/>
+                                </div>
+                            </div>
+                        </t>
+                        
+                        <!-- Amount Display -->
+                        <div class="oma-amount bg-light rounded p-4 mb-4">
+                            <span class="text-muted">Amount to pay:</span>
+                            <div class="fs-1 fw-bold text-primary" t-esc="selfOrder.formatMonetary(selfOrder.currentOrder.amount_total)"/>
+                        </div>
+                        
+                        <!-- Processing Animation -->
+                        <t t-if="omaState.processing and !omaState.success and !omaState.error">
+                            <div class="oma-processing">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Processing...</span>
+                                </div>
+                                <p class="mt-2 text-muted">Waiting for terminal response...</p>
+                            </div>
+                        </t>
+                        
+                        <!-- Success Message -->
+                        <t t-if="omaState.success">
+                            <div class="alert alert-success d-flex align-items-center mb-4" role="alert">
+                                <i class="fa fa-check-circle me-3 fs-3"/>
+                                <div>
+                                    <strong>Payment Approved!</strong>
+                                    <p class="mb-0 mt-1">Redirecting to order confirmation...</p>
+                                </div>
+                            </div>
+                        </t>
+                    </div>
+                </t>
+                
+                <!-- Default content when not processing OMA -->
+                <t t-else="">
+                    <h1 class="mb-4">Follow instructions on the terminal</h1>
+                    <div class="d-inline-flex flex-column border rounded p-4 bg-view mb-3">
+                        <i class="fa fa-credit-card-alt fs-1" aria-hidden="true"/>
+                    </div>
+                </t>
+            </div>
+        </xpath>
+        
+        <!-- Update footer buttons for OMA -->
+        <xpath expr="//div[hasclass('px-3')][hasclass('py-4')]" position="replace">
+            <div class="px-3 py-4 d-flex gap-2 justify-content-center">
+                <!-- Back button - shown when selecting or on error (not processing) -->
+                <button class="btn btn-secondary btn-lg px-5" 
+                        t-if="state.selection or (omaState and omaState.error and !omaState.processing)" 
+                        t-on-click="() => this.router.back()">
+                    <i class="fa fa-arrow-left me-2"/>Back
+                </button>
+                
+                <!-- Retry button - shown on error -->
+                <button class="btn btn-primary btn-lg px-5" 
+                        t-if="omaState and omaState.error and !omaState.processing" 
+                        t-on-click="retryOmaPayment">
+                    <i class="fa fa-refresh me-2"/>Retry Payment
+                </button>
+                
+                <!-- Cancel button - shown during processing -->
+                <button class="btn btn-outline-danger btn-lg px-5" 
+                        t-if="omaState and omaState.processing and !omaState.success and !omaState.error" 
+                        t-on-click="cancelOmaPayment">
+                    <i class="fa fa-times me-2"/>Cancel
+                </button>
+            </div>
+        </xpath>
+    </t>
+</templates>

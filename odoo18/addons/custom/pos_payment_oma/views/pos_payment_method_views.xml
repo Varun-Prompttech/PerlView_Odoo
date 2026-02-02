@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Inherit Payment Method Form View to add OMA Configuration -->
+    <record id="pos_payment_method_view_form_oma" model="ir.ui.view">
+        <field name="name">pos.payment.method.form.oma</field>
+        <field name="model">pos.payment.method</field>
+        <field name="inherit_id" ref="point_of_sale.pos_payment_method_view_form"/>
+        <field name="arch" type="xml">
+            <!-- Add OMA Configuration Section after the Payment methods group -->
+            <xpath expr="//group[@name='Payment methods']" position="after">
+                <group string="OMA Configuration" 
+                       invisible="use_payment_terminal != 'oma'">
+                    <group>
+                        <field name="oma_api_endpoint" placeholder="https://rps.omaemirates.ae"/>
+                        <field name="oma_merchant_id" placeholder="Merchant ID"/>
+                        <field name="oma_terminal_id" placeholder="Terminal ID"/>
+                    </group>
+                    <group>
+                        <field name="oma_client_id" placeholder="Client ID"/>
+                        <field name="oma_api_key" placeholder="API Key"/>
+                        <field name="oma_aes_key" placeholder="AES Key" password="True"/>
+                    </group>
+                </group>
+            </xpath>
+        </field>
+    </record>
+</odoo>
