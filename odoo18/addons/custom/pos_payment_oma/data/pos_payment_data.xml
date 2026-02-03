@@ -8,9 +8,10 @@
             <field name="oma_api_endpoint">https://rps.omaemirates.ae</field>
             <field name="oma_merchant_id">TEST_MERCHANT_ID</field>
             <field name="oma_terminal_id">TEST_TERMINAL_ID</field>
-            <field name="oma_client_id">TEST_CLIENT_ID</field>
-            <field name="oma_api_key">TEST_API_KEY_12345</field>
-            <field name="oma_aes_key">TEST_AES_KEY_XYZ</field>
+            <field name="oma_secret_key">TEST_SECRET_KEY</field>
+            <field name="oma_key_version">TEST_KEY_VERSION</field>
+            <field name="oma_institute">Bank</field>
+            <field name="oma_serial_number">TEST_SERIAL</field>
         </record>
     </data>
 </odoo>
