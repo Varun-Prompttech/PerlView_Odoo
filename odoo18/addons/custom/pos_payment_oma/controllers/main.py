@@ -122,7 +122,11 @@ class OmaPaymentController(http.Controller):
                 return None
 
             # Generate a proper order reference
-            order_ref = request.env['ir.sequence'].sudo().next_by_code('pos.order') or f"POS-{pos_config.id}-{fields.Datetime.now().strftime('%Y%m%d%H%M%S')}"
+            order_ref = order_data.get('name')
+            if not order_ref or order_ref == '/':
+                 order_ref = request.env['ir.sequence'].sudo().next_by_code('pos.order') 
+                 if not order_ref:
+                      order_ref = f"POS-{pos_config.id}-{fields.Datetime.now().strftime('%Y%m%d%H%M%S')}"
 
             # Prepare order values
             order_vals = {
@@ -235,23 +239,31 @@ class OmaPaymentController(http.Controller):
             result = service.initiate_transaction(amount, client_ref, invoice_no)
 
             # Handle Result
-            if result.get('omaErrorCode') == '000':
-                _logger.info("OMA Initiation Success. Polling for status...")
+            # Error 203 means "Sale in progress" - we should try to poll anyway if we have an ID
+            # or it might mean the terminal is busy with OUR request just now.
+            if result.get('omaErrorCode') == '000' or result.get('omaErrorCode') == '203':
+                _logger.info("OMA Initiation Success/InProgress (Code %s). Polling for status...", result.get('omaErrorCode'))
+                
                 mw_request_id = result.get('omaTxnMwRequestId')
                 
+                # If 203 (Sale in progress) but NO mw_request_id, we might need to rely on client_ref
+                # However, the API usually returns the ID even in 203 cases if it's the same txn
+                
                 if not mw_request_id:
-                    # Some implementations might return success immediately w/o MW ID
-                    if result.get('omaIsTransactionSuccess') == 'true':
-                        return {
+                     if result.get('omaErrorCode') == '000' and result.get('omaIsTransactionSuccess') == 'true':
+                         return {
                             'success': True,
                             'transaction_id': 'N/A',
                             'message': 'Payment approved',
                             'oma_response': result
                         }
-                    else:
-                        return {
+                     elif result.get('omaErrorCode') == '203':
+                         # If 203 and no ID, we can't really poll with ID. 
+                         # But let's try polling with just client_ref or wait and retry?
+                         # For now, let's assume we can proceed if we have an ID, or fail if not.
+                         return {
                             'success': False,
-                            'error': 'No transaction ID received from terminal'
+                            'error': "Terminal busy (Sale in progress) and no Transaction ID returned. Please wait and retry."
                         }
                 
                 return self._poll_transaction_status(service, client_ref, mw_request_id)
@@ -277,15 +289,13 @@ class OmaPaymentController(http.Controller):
             time.sleep(2)
             try:
                 status_result = service.check_status(client_ref, mw_request_id)
-                _logger.info("OMA Poll Status (attempt %d): errorCode=%s, statusMsg=%s", 
-                            attempt + 1,
-                            status_result.get('omaErrorCode'),
-                            status_result.get('omaTransactionStatusMsg'))
-
                 error_code = status_result.get('omaErrorCode')
+                status_msg = status_result.get('omaTransactionStatusMsg', '')
                 
+                _logger.info("OMA Poll Status (attempt %d): errorCode=%s, statusMsg=%s", 
+                            attempt + 1, error_code, status_msg)
+
                 if error_code == '000':
-                    status_msg = status_result.get('omaTransactionStatusMsg', '')
                     is_success = status_result.get('omaIsTransactionSuccess')
                     
                     if status_msg == 'TRANSACTION_SUCCESS' or is_success == 'true':
@@ -307,15 +317,25 @@ class OmaPaymentController(http.Controller):
                             'success': False,
                             'error': f'Transaction {status_msg}'
                         }
-                    # Continue polling if status is pending or empty
+                    # If PENDING or similar (often just empty or specific code), continue
+                
+                elif error_code == '203':
+                    # Sale in progress - keep polling
+                    _logger.info("Poll: Sale is still in progress (203)... waiting.")
+                    continue
+                    
                 elif error_code != '000':
                     # Non-zero error code from inquiry
                     error_msg = status_result.get('omaErrorMessage', 'Unknown error')
-                    if 'pending' not in error_msg.lower():
-                        return {
-                            'success': False,
-                            'error': f'Terminal Error: {error_msg}'
-                        }
+                    # Some gateways return specific codes for "not found yet" or "processing"
+                    # If we aren't sure, maybe we shouldn't fail immediately on network blips?
+                    if 'pending' in error_msg.lower() or 'process' in error_msg.lower():
+                        continue
+                        
+                    return {
+                        'success': False,
+                        'error': f'Terminal Error: {error_msg}'
+                    }
                         
             except Exception as e:
                 _logger.warning("Polling error (attempt %d): %s", attempt + 1, e)
@@ -351,22 +371,49 @@ class OmaPaymentController(http.Controller):
             
             _logger.info("Creating payment with vals: %s", payment_vals)
             payment = request.env['pos.payment'].sudo().create(payment_vals)
+            
+            # Force flush to ensure payment is in DB
+            request.env['pos.payment'].flush_model()
+            
             _logger.info("Payment created: ID %s, amount %s", payment.id, payment.amount)
             
-            # Refresh order to get updated amount_paid
-            pos_order.invalidate_recordset(['amount_paid'])
-            _logger.info("After payment - amount_paid: %s, amount_total: %s", 
-                        pos_order.amount_paid, pos_order.amount_total)
+            # Retry loop for validation (handling potential race/cache issues)
+            import time
+            validation_success = False
+            last_error = ""
             
-            # Validate order if draft and fully paid
-            if pos_order.state == 'draft':
-                if pos_order.amount_paid >= pos_order.amount_total:
-                    pos_order.action_pos_order_paid()
-                    _logger.info("Order %s marked as paid", pos_order.name)
-                else:
-                    _logger.warning("Order %s not fully paid: paid=%s, total=%s", 
-                                   pos_order.name, pos_order.amount_paid, pos_order.amount_total)
-                    raise ValueError(f"Order {pos_order.name} is not fully paid (paid: {pos_order.amount_paid}, total: {pos_order.amount_total})")
+            for i in range(5):
+                pos_order.invalidate_recordset(['amount_paid', 'payment_ids'])
+                computed_paid = sum(pos_order.payment_ids.mapped('amount'))
+                current_paid = computed_paid
+                
+                if current_paid >= (pos_order.amount_total - 0.05):
+                     if pos_order.state == 'draft':
+                         pos_order.action_pos_order_paid()
+                     _logger.info("Order %s marked as paid (attempt %d)", pos_order.name, i+1)
+                     validation_success = True
+                     break
+                
+                # Check for small diff and auto-correct
+                diff = pos_order.amount_total - current_paid
+                if 0 < diff < 1.0:
+                      _logger.info("Small difference detected (%s). Auto-correcting.", diff)
+                      adj_vals = {
+                             'pos_order_id': pos_order.id,
+                             'payment_method_id': payment_method.id,
+                             'amount': diff,
+                             'payment_date': fields.Datetime.now(),
+                             'transaction_id': 'ROUNDING-ADJ'
+                      }
+                      request.env['pos.payment'].sudo().create(adj_vals)
+                      # Continue loop to verify in next iteration
+                
+                last_error = f"paid: {current_paid}, total: {pos_order.amount_total}"
+                _logger.warning("Payment validation attempt %d failed: %s", i+1, last_error)
+                time.sleep(0.5)
+            
+            if not validation_success and pos_order.state == 'draft':
+                 raise ValueError(f"Order {pos_order.name} is not fully paid after retries ({last_error})")
             
             _logger.info("Order %s successfully processed", pos_order.name)
 

@@ -48,7 +48,8 @@ class OMAService:
             }
             
             # Amount in minor units (cents) - e.g., 9.00 AED = "900"
-            amount_minor = str(int(float(amount) * 100))
+            # Fix floating point precision issues (e.g. 17.83 * 100 might be 1782.999 -> 1782)
+            amount_minor = str(int(round(float(amount) * 100)))
             
             # Plain JSON payload as per user sample
             body = {
