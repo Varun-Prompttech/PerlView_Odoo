@@ -109,7 +109,7 @@ patch(PaymentPage.prototype, {
                 // Navigate to confirmation page
                 this.router.navigate("confirmation", {
                     orderAccessToken: response.order_access_token,
-                    screenMode: "order",
+                    screenMode: "pay",
                 });
             } else {
                 // Show terminal error message

@@ -62,9 +62,11 @@ class OmaPaymentController(http.Controller):
                 # Create payment and complete order
                 try:
                     self._create_payment_and_complete(pos_order, payment_method, amount, ecr_result)
+                    # Ensure access token is generated for confirmation page (needed for printing)
+                    access_token = pos_order._ensure_access_token()
                     return {
                         'success': True,
-                        'order_access_token': pos_order.access_token,
+                        'order_access_token': access_token,
                         'message': 'Payment successful'
                     }
                 except Exception as e:
