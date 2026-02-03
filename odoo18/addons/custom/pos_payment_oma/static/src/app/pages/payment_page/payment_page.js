@@ -60,6 +60,11 @@ patch(PaymentPage.prototype, {
     },
 
     selectMethod(methodId) {
+        // Prevent multiple clicks if already processing
+        if (this.omaState.processing) {
+            return;
+        }
+
         const method = this.selfOrder.models["pos.payment.method"].find(
             (p) => p.id === methodId
         );
@@ -76,6 +81,8 @@ patch(PaymentPage.prototype, {
     },
 
     async startOmaPayment() {
+        if (this.omaState.processing) return;
+
         this.omaState.processing = true;
         this.omaState.message = "Connecting to terminal...";
         this.omaState.error = false;
