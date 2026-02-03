@@ -47,9 +47,12 @@ class OMAService:
                 'Content-Type': 'application/json'
             }
             
+            # Amount in minor units (cents) - e.g., 9.00 AED = "900"
+            amount_minor = str(int(float(amount) * 100))
+            
             # Plain JSON payload as per user sample
             body = {
-                "omaAmount": str(int(amount * 100)),  # Minor currency units
+                "omaAmount": amount_minor,
                 "omaInvoiceNo": str(order_id) if order_id else str(order_ref),
                 "omaMerchantId": str(self.merchant_id),
                 "omaPayload": "",  # Empty as per sample
@@ -58,7 +61,8 @@ class OMAService:
                 "omaTipAmount": "0",  # User requested 0
                 "omaTxnClientRefNumber": str(order_ref),
                 "omaTxnType": "T001",
-                "omaSerialNumber": str(self.serial_number)
+                "omaSerialNumber": str(self.serial_number),
+                "omaclientid": ""  # Empty as per sample
             }
             
             _logger.info(f"OMA API Request: {url}")
@@ -67,7 +71,9 @@ class OMAService:
             
             response = requests.post(url, json=body, headers=headers, timeout=30, verify=False)
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+            _logger.info(f"OMA Initiate Response: {result}")
+            return result
             
         except Exception as e:
             _logger.error(f"OMA Initiation Error: {e}")
@@ -88,17 +94,23 @@ class OMAService:
                 'Content-Type': 'application/json'
             }
             
+            # Body as per user's Postman sample - includes omaMerchantId
             body = {
+                "omaMerchantId": str(self.merchant_id),
+                "omaPayload": "",
+                "omaTerminalId": str(self.terminal_id),
                 "omaTxnMwRequestId": str(mw_request_id),
-                "omaTxnClientRefNumber": str(client_ref),
-                "omaTerminalId": str(self.terminal_id)
+                "omaTxnClientRefNumber": str(client_ref)
             }
             
             _logger.info(f"OMA Inquiry Request: {url}")
+            _logger.info(f"OMA Inquiry Body: {body}")
             
             response = requests.post(url, json=body, headers=headers, timeout=30, verify=False)
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+            _logger.info(f"OMA Inquiry Response: {result}")
+            return result
             
         except Exception as e:
             _logger.error(f"OMA Inquiry Error: {e}")

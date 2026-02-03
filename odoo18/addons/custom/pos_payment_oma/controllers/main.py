@@ -7,7 +7,6 @@ Handles ECR payment API calls for Kiosk self-order.
 
 import logging
 import json
-import requests
 from odoo import http, fields
 from odoo.http import request
 
@@ -52,8 +51,14 @@ class OmaPaymentController(http.Controller):
             if not pos_order:
                 return {'success': False, 'error': 'Failed to create order'}
 
+            _logger.info("Processing OMA payment for order %s (ID: %s), amount: %s", 
+                        pos_order.name, pos_order.id, pos_order.amount_total)
+
             # Calculate amount
             amount = pos_order.amount_total
+
+            if amount <= 0:
+                return {'success': False, 'error': 'Order amount must be greater than 0'}
 
             # Call OMA ECR API
             ecr_result = self._call_oma_ecr_api(payment_method, amount, pos_order)
@@ -63,13 +68,14 @@ class OmaPaymentController(http.Controller):
                 try:
                     self._create_payment_and_complete(pos_order, payment_method, amount, ecr_result)
                     # Ensure access token is generated for confirmation page (needed for printing)
-                    access_token = pos_order._ensure_access_token()
+                    order_access_token = pos_order._ensure_access_token()
                     return {
                         'success': True,
-                        'order_access_token': access_token,
+                        'order_access_token': order_access_token,
                         'message': 'Payment successful'
                     }
                 except Exception as e:
+                    _logger.exception("Order completion error for %s: %s", pos_order.name, str(e))
                     return {
                         'success': False,
                         'error': f'Order Completion Error: {str(e)}'
@@ -87,6 +93,8 @@ class OmaPaymentController(http.Controller):
     def _get_or_create_order(self, pos_config, order_data):
         """Get existing order or create a new one from the order data."""
         try:
+            _logger.info("Order data received: %s", order_data)
+            
             # Find existing order by uuid if available
             if order_data.get('uuid'):
                 existing_order = request.env['pos.order'].sudo().search([
@@ -94,8 +102,17 @@ class OmaPaymentController(http.Controller):
                     ('config_id', '=', pos_config.id),
                 ], limit=1)
                 if existing_order:
-                    # Clear existing payments if any, to avoid duplicate/partial payment issues in retry
-                    # relevant if previously failed
+                    _logger.info("Found existing order: %s", existing_order.name)
+                    return existing_order
+
+            # Also check by access_token if provided
+            if order_data.get('access_token'):
+                existing_order = request.env['pos.order'].sudo().search([
+                    ('access_token', '=', order_data['access_token']),
+                    ('config_id', '=', pos_config.id),
+                ], limit=1)
+                if existing_order:
+                    _logger.info("Found existing order by access_token: %s", existing_order.name)
                     return existing_order
 
             # Create new order from the self-order data
@@ -104,31 +121,67 @@ class OmaPaymentController(http.Controller):
                 _logger.error("No active session for POS config %s", pos_config.id)
                 return None
 
+            # Generate a proper order reference
+            order_ref = request.env['ir.sequence'].sudo().next_by_code('pos.order') or f"POS-{pos_config.id}-{fields.Datetime.now().strftime('%Y%m%d%H%M%S')}"
+
             # Prepare order values
             order_vals = {
+                'name': order_ref,
+                'pos_reference': order_ref,
                 'config_id': pos_config.id,
                 'session_id': session.id,
-                'partner_id': order_data.get('partner_id'),
+                'partner_id': order_data.get('partner_id') or False,
                 'pricelist_id': pos_config.pricelist_id.id,
                 'lines': [],
+                'uuid': order_data.get('uuid') or False,
             }
 
             # Add order lines
-            for line_data in order_data.get('lines', []):
-                if isinstance(line_data, (list, tuple)) and len(line_data) >= 3:
-                    line_vals = line_data[2] if len(line_data) >= 3 else line_data[1]
+            lines_data = order_data.get('lines', [])
+            _logger.info("Processing %d order lines", len(lines_data))
+            
+            for line_data in lines_data:
+                # Handle different line data formats
+                if isinstance(line_data, (list, tuple)):
+                    if len(line_data) >= 3:
+                        line_vals = line_data[2]
+                    elif len(line_data) >= 2:
+                        line_vals = line_data[1]
+                    else:
+                        line_vals = line_data[0] if line_data else {}
                 else:
                     line_vals = line_data
 
+                product_id = line_vals.get('product_id')
+                if isinstance(product_id, (list, tuple)):
+                    product_id = product_id[0]
+                
+                if not product_id:
+                    _logger.warning("Skipping line without product_id: %s", line_vals)
+                    continue
+
+                qty = float(line_vals.get('qty', 1))
+                price_unit = float(line_vals.get('price_unit', 0))
+                
+                # Calculate subtotals if not provided
+                price_subtotal_incl = float(line_vals.get('price_subtotal_incl', price_unit * qty))
+                price_subtotal = float(line_vals.get('price_subtotal', price_subtotal_incl))
+
                 order_vals['lines'].append((0, 0, {
-                    'product_id': line_vals.get('product_id'),
-                    'qty': line_vals.get('qty', 1),
-                    'price_unit': line_vals.get('price_unit', 0),
-                    'price_subtotal': line_vals.get('price_subtotal', 0),
-                    'price_subtotal_incl': line_vals.get('price_subtotal_incl', 0),
+                    'product_id': product_id,
+                    'qty': qty,
+                    'price_unit': price_unit,
+                    'price_subtotal': price_subtotal,
+                    'price_subtotal_incl': price_subtotal_incl,
                 }))
 
+            if not order_vals['lines']:
+                _logger.error("No valid order lines found")
+                return None
+
+            _logger.info("Creating order with vals: %s", {k: v for k, v in order_vals.items() if k != 'lines'})
             pos_order = request.env['pos.order'].sudo().create(order_vals)
+            _logger.info("Created order: %s (ID: %s), Total: %s", pos_order.name, pos_order.id, pos_order.amount_total)
             return pos_order
 
         except Exception as e:
@@ -172,26 +225,33 @@ class OmaPaymentController(http.Controller):
                 secret_key=payment_method.oma_secret_key
             )
 
-            # Initiate Transaction
-            client_ref = pos_order.pos_reference or f"ORDER-{pos_order.id}"
-            _logger.info("Initiating OMA Transaction for Ref: %s", client_ref)
+            # Initiate Transaction - use order name as client reference
+            client_ref = pos_order.pos_reference or pos_order.name or f"ORDER-{pos_order.id}"
+            invoice_no = str(pos_order.id).zfill(6)  # 6-digit invoice number
             
-            result = service.initiate_transaction(amount, client_ref)
+            _logger.info("Initiating OMA Transaction for Ref: %s, Invoice: %s, Amount: %s", 
+                        client_ref, invoice_no, amount)
+            
+            result = service.initiate_transaction(amount, client_ref, invoice_no)
 
             # Handle Result
             if result.get('omaErrorCode') == '000':
-                # Message says "Transaction initiated..." so we must poll
-                # Wait for completion
                 _logger.info("OMA Initiation Success. Polling for status...")
                 mw_request_id = result.get('omaTxnMwRequestId')
+                
                 if not mw_request_id:
-                     # Some implementations might return success immediately w/o MW ID?
-                     # If so check status msg
-                     if result.get('omaIsTransactionSuccess') == 'true':
-                         return {
+                    # Some implementations might return success immediately w/o MW ID
+                    if result.get('omaIsTransactionSuccess') == 'true':
+                        return {
                             'success': True,
-                            'transaction_id': result.get('omaTxnMwRequestId') or 'N/A',
-                            'message': 'Payment approved'
+                            'transaction_id': 'N/A',
+                            'message': 'Payment approved',
+                            'oma_response': result
+                        }
+                    else:
+                        return {
+                            'success': False,
+                            'error': 'No transaction ID received from terminal'
                         }
                 
                 return self._poll_transaction_status(service, client_ref, mw_request_id)
@@ -209,63 +269,104 @@ class OmaPaymentController(http.Controller):
     def _poll_transaction_status(self, service, client_ref, mw_request_id):
         """Poll the inquiry API until success, failure, or timeout."""
         import time
-        # Poll for 120 seconds (20 * 6s) to allow customer interaction
-        # Kiosk UI timeout is usually higher? 
-        # Standard POS timeout is 30-60s. Let's do 60s (20 * 3s)
-        max_retries = 30
-        for _ in range(max_retries):
+        
+        # Poll for up to 120 seconds (60 retries * 2 seconds)
+        max_retries = 60
+        
+        for attempt in range(max_retries):
             time.sleep(2)
             try:
                 status_result = service.check_status(client_ref, mw_request_id)
-                _logger.info("OMA Poll Status: %s", status_result)
+                _logger.info("OMA Poll Status (attempt %d): errorCode=%s, statusMsg=%s", 
+                            attempt + 1,
+                            status_result.get('omaErrorCode'),
+                            status_result.get('omaTransactionStatusMsg'))
 
-                if status_result.get('omaErrorCode') == '000':
-                    status_msg = status_result.get('omaTransactionStatusMsg')
+                error_code = status_result.get('omaErrorCode')
+                
+                if error_code == '000':
+                    status_msg = status_result.get('omaTransactionStatusMsg', '')
+                    is_success = status_result.get('omaIsTransactionSuccess')
                     
-                    if status_msg == 'TRANSACTION_SUCCESS' or status_result.get('omaIsTransactionSuccess') == 'true':
-                         return {
+                    if status_msg == 'TRANSACTION_SUCCESS' or is_success == 'true':
+                        _logger.info("Payment SUCCESS! Auth: %s, RRN: %s", 
+                                    status_result.get('omaAuthCode'),
+                                    status_result.get('omaRrn'))
+                        return {
                             'success': True,
                             'transaction_id': mw_request_id,
-                            'message': 'Payment approved'
+                            'auth_code': status_result.get('omaAuthCode', ''),
+                            'rrn': status_result.get('omaRrn', ''),
+                            'card_type': status_result.get('omaCardName', ''),
+                            'masked_pan': status_result.get('omaMaskedPan', ''),
+                            'message': status_result.get('omaErrorMessage', 'Approved'),
+                            'oma_response': status_result
                         }
-                    elif status_msg in ['DECLINED', 'CANCELLED_BY_CLIENT', 'TIMEOUT', 'FAILED']:
+                    elif status_msg in ['DECLINED', 'CANCELLED_BY_CLIENT', 'TIMEOUT', 'FAILED', 'TRANSACTION_FAILED']:
                         return {
                             'success': False,
                             'error': f'Transaction {status_msg}'
                         }
-                    # If PENDING or similar (often just empty or specific code), continue
+                    # Continue polling if status is pending or empty
+                elif error_code != '000':
+                    # Non-zero error code from inquiry
+                    error_msg = status_result.get('omaErrorMessage', 'Unknown error')
+                    if 'pending' not in error_msg.lower():
+                        return {
+                            'success': False,
+                            'error': f'Terminal Error: {error_msg}'
+                        }
+                        
             except Exception as e:
-                _logger.warning("Polling error: %s", e)
+                _logger.warning("Polling error (attempt %d): %s", attempt + 1, e)
                 # Continue polling even if one request fails
         
-        return {'success': False, 'error': 'Payment Timed Out (No response from terminal)'}
+        return {'success': False, 'error': 'Payment Timed Out (No response from terminal in 120 seconds)'}
 
     def _create_payment_and_complete(self, pos_order, payment_method, amount, ecr_result):
         """Create payment for the order and validate it."""
         try:
             _logger.info("Completing order %s with amount %s", pos_order.name, amount)
+            _logger.info("Order state: %s, amount_total: %s, amount_paid: %s", 
+                        pos_order.state, pos_order.amount_total, pos_order.amount_paid)
 
-            # 1. Create the payment
+            # Build transaction details for storage
+            transaction_id = ecr_result.get('transaction_id', '')
+            card_type = ecr_result.get('card_type', 'OMA Card')
+            
+            # Create the payment
             payment_vals = {
                 'pos_order_id': pos_order.id,
                 'payment_method_id': payment_method.id,
                 'amount': amount,
-                'transaction_id': ecr_result.get('transaction_id', ''),
+                'transaction_id': transaction_id,
                 'payment_date': fields.Datetime.now(),
-                'card_type': 'oma_ecr',
             }
             
+            # Add card info if available
+            if ecr_result.get('masked_pan'):
+                payment_vals['card_no'] = ecr_result.get('masked_pan')
+            if ecr_result.get('card_type'):
+                payment_vals['card_type'] = ecr_result.get('card_type')
+            
+            _logger.info("Creating payment with vals: %s", payment_vals)
             payment = request.env['pos.payment'].sudo().create(payment_vals)
+            _logger.info("Payment created: ID %s, amount %s", payment.id, payment.amount)
             
-            # 2. Verify total paid matches total due
-            # Important: Re-browse to get updated amount_paid computation
-            pos_order = pos_order.sudo() # ensure we have sudo access
+            # Refresh order to get updated amount_paid
+            pos_order.invalidate_recordset(['amount_paid'])
+            _logger.info("After payment - amount_paid: %s, amount_total: %s", 
+                        pos_order.amount_paid, pos_order.amount_total)
             
-            # 3. Validate
-            # action_pos_order_paid() checks if state is 'draft' and amount_paid >= amount_total
-            # It transitions to 'paid', creates accounting entries, etc.
+            # Validate order if draft and fully paid
             if pos_order.state == 'draft':
-                pos_order.action_pos_order_paid()
+                if pos_order.amount_paid >= pos_order.amount_total:
+                    pos_order.action_pos_order_paid()
+                    _logger.info("Order %s marked as paid", pos_order.name)
+                else:
+                    _logger.warning("Order %s not fully paid: paid=%s, total=%s", 
+                                   pos_order.name, pos_order.amount_paid, pos_order.amount_total)
+                    raise ValueError(f"Order {pos_order.name} is not fully paid (paid: {pos_order.amount_paid}, total: {pos_order.amount_total})")
             
             _logger.info("Order %s successfully processed", pos_order.name)
 
