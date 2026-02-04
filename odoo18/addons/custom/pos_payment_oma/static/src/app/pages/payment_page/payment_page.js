@@ -141,12 +141,23 @@ patch(PaymentPage.prototype, {
         }
     },
 
-    retryOmaPayment() {
+    cancelOrderAndStartNew() {
+        // Clear current state
+        this.stopTimer();
+        this.omaState.processing = false;
         this.omaState.error = false;
         this.omaState.success = false;
         this.omaState.message = "";
         this.selfOrder.paymentError = false;
-        this.startOmaPayment();
+
+        // Clear the current order to start fresh
+        if (this.selfOrder.currentOrder) {
+            this.selfOrder.currentOrder.lines = [];
+            this.selfOrder.currentOrder.amount_total = 0;
+        }
+
+        // Navigate to the start/landing page
+        this.router.navigate("landing");
     },
 
     cancelOmaPayment() {
