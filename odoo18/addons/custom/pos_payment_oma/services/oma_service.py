@@ -74,11 +74,23 @@ class OMAService:
             response.raise_for_status()
             result = response.json()
             _logger.info(f"OMA Initiate Response: {result}")
+            
+            # Add request details to result for logging
+            result['_request_url'] = url
+            result['_request_headers'] = {k: v for k, v in headers.items() if k != 'omaSecretKey'}  # Don't log secret
+            result['_request_body'] = body
+            
             return result
             
         except Exception as e:
             _logger.error(f"OMA Initiation Error: {e}")
-            return {'omaErrorCode': '999', 'omaErrorMessage': str(e)}
+            return {
+                'omaErrorCode': '999', 
+                'omaErrorMessage': str(e),
+                '_request_url': url if 'url' in locals() else '',
+                '_request_headers': {},
+                '_request_body': body if 'body' in locals() else {}
+            }
 
     def check_status(self, client_ref, mw_request_id):
         """Check transaction status (Inquiry)."""
@@ -111,11 +123,23 @@ class OMAService:
             response.raise_for_status()
             result = response.json()
             _logger.info(f"OMA Inquiry Response: {result}")
+            
+            # Add request details to result for logging
+            result['_request_url'] = url
+            result['_request_headers'] = {k: v for k, v in headers.items() if k != 'omaSecretKey'}
+            result['_request_body'] = body
+            
             return result
             
         except Exception as e:
             _logger.error(f"OMA Inquiry Error: {e}")
-            return {'omaErrorCode': '999', 'omaErrorMessage': str(e)}
+            return {
+                'omaErrorCode': '999', 
+                'omaErrorMessage': str(e),
+                '_request_url': url if 'url' in locals() else '',
+                '_request_headers': {},
+                '_request_body': body if 'body' in locals() else {}
+            }
 
     def get_session_key(self):
         """

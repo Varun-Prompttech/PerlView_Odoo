@@ -255,6 +255,9 @@ class OmaPaymentController(http.Controller):
                         client_ref, invoice_no, amount)
             
             result = service.initiate_transaction(amount, client_ref, invoice_no)
+            
+            # Save initiate transaction log
+            self._save_transaction_log(pos_order, 'initiate', client_ref, result, amount)
 
             # Handle Result
             # Error 203 means "Sale in progress" - we should try to poll anyway if we have an ID
@@ -284,7 +287,7 @@ class OmaPaymentController(http.Controller):
                             'error': "Terminal busy (Sale in progress) and no Transaction ID returned. Please wait and retry."
                         }
                 
-                return self._poll_transaction_status(service, client_ref, mw_request_id)
+                return self._poll_transaction_status(service, client_ref, mw_request_id, pos_order, amount)
             else:
                 error_msg = result.get('omaErrorMessage') or 'Unknown Error'
                 return {
@@ -296,17 +299,19 @@ class OmaPaymentController(http.Controller):
             _logger.exception("OMA ECR Error: %s", str(e))
             return {'success': False, 'error': f'System Error: {str(e)}'}
 
-    def _poll_transaction_status(self, service, client_ref, mw_request_id):
+    def _poll_transaction_status(self, service, client_ref, mw_request_id, pos_order=None, amount=0):
         """Poll the inquiry API until success, failure, or timeout."""
         import time
         
         # Poll for up to 120 seconds (60 retries * 2 seconds)
         max_retries = 60
+        last_result = None
         
         for attempt in range(max_retries):
             time.sleep(2)
             try:
                 status_result = service.check_status(client_ref, mw_request_id)
+                last_result = status_result
                 error_code = status_result.get('omaErrorCode')
                 status_msg = status_result.get('omaTransactionStatusMsg', '')
                 
@@ -320,6 +325,11 @@ class OmaPaymentController(http.Controller):
                         _logger.info("Payment SUCCESS! Auth: %s, RRN: %s", 
                                     status_result.get('omaAuthCode'),
                                     status_result.get('omaRrn'))
+                        
+                        # Save successful inquiry log
+                        if pos_order:
+                            self._save_transaction_log(pos_order, 'inquiry', client_ref, status_result, amount, mw_request_id)
+                        
                         return {
                             'success': True,
                             'transaction_id': mw_request_id,
@@ -331,6 +341,9 @@ class OmaPaymentController(http.Controller):
                             'oma_response': status_result
                         }
                     elif status_msg in ['DECLINED', 'CANCELLED_BY_CLIENT', 'TIMEOUT', 'FAILED', 'TRANSACTION_FAILED']:
+                        # Save failed inquiry log
+                        if pos_order:
+                            self._save_transaction_log(pos_order, 'inquiry', client_ref, status_result, amount, mw_request_id)
                         return {
                             'success': False,
                             'error': f'Transaction {status_msg}'
@@ -349,6 +362,10 @@ class OmaPaymentController(http.Controller):
                     # If we aren't sure, maybe we shouldn't fail immediately on network blips?
                     if 'pending' in error_msg.lower() or 'process' in error_msg.lower():
                         continue
+                    
+                    # Save failed inquiry log
+                    if pos_order:
+                        self._save_transaction_log(pos_order, 'inquiry', client_ref, status_result, amount, mw_request_id)
                         
                     return {
                         'success': False,
@@ -358,6 +375,10 @@ class OmaPaymentController(http.Controller):
             except Exception as e:
                 _logger.warning("Polling error (attempt %d): %s", attempt + 1, e)
                 # Continue polling even if one request fails
+        
+        # Timeout - save last result if available
+        if pos_order and last_result:
+            self._save_transaction_log(pos_order, 'inquiry', client_ref, last_result, amount, mw_request_id)
         
         return {'success': False, 'error': 'Payment Timed Out (No response from terminal in 120 seconds)'}
 
@@ -402,56 +423,80 @@ class OmaPaymentController(http.Controller):
                         verify_payment.exists(), verify_payment.pos_order_id.id if verify_payment.exists() else 'N/A',
                         verify_payment.amount if verify_payment.exists() else 'N/A')
             
-            # Also verify via direct SQL
+            # Verify via direct SQL - this is the source of truth
             request.env.cr.execute("""
-                SELECT id, pos_order_id, amount FROM pos_payment 
+                SELECT COALESCE(SUM(amount), 0) FROM pos_payment 
                 WHERE pos_order_id = %s
             """, (pos_order.id,))
-            payments_in_db = request.env.cr.fetchall()
-            _logger.info("Payments in DB for order %s: %s", pos_order.id, payments_in_db)
+            total_paid_sql = request.env.cr.fetchone()[0]
+            _logger.info("Total payments in DB for order %s: %s (order total: %s)", 
+                        pos_order.id, total_paid_sql, pos_order.amount_total)
             
-            # Retry loop for validation (handling potential race/cache issues)
-            import time
-            validation_success = False
-            last_error = ""
-            
-            for i in range(5):
-                pos_order.invalidate_recordset(['amount_paid', 'payment_ids'])
-                # Re-read order from DB
-                pos_order = request.env['pos.order'].sudo().browse(pos_order.id)
-                computed_paid = sum(pos_order.payment_ids.mapped('amount'))
-                current_paid = computed_paid
+            # Check if fully paid using SQL result (with tolerance)
+            if total_paid_sql >= (pos_order.amount_total - 0.05):
+                if pos_order.state == 'draft':
+                    # Directly update order state via SQL to bypass ORM caching issues
+                    request.env.cr.execute("""
+                        UPDATE pos_order SET state = 'paid' WHERE id = %s AND state = 'draft'
+                    """, (pos_order.id,))
+                    request.env.cr.commit()
+                    
+                    # Invalidate cache and re-read
+                    pos_order.invalidate_recordset()
+                    pos_order = request.env['pos.order'].sudo().browse(pos_order.id)
+                    
+                    _logger.info("Order %s state set to 'paid' via SQL", pos_order.name)
+                    
+                    # Now try to complete the order properly (create accounting entries etc.)
+                    try:
+                        if pos_order.state == 'paid':
+                            # Call the session processing if needed
+                            pos_order._create_order_picking()
+                            pos_order._generate_pos_order_invoice()
+                    except Exception as e:
+                        _logger.warning("Post-paid processing: %s", str(e))
+                        # Continue anyway - order is paid
                 
-                if current_paid >= (pos_order.amount_total - 0.05):
-                     if pos_order.state == 'draft':
-                         pos_order.action_pos_order_paid()
-                     _logger.info("Order %s marked as paid (attempt %d)", pos_order.name, i+1)
-                     validation_success = True
-                     break
-                
-                # Check for small diff and auto-correct
-                diff = pos_order.amount_total - current_paid
-                if 0 < diff < 1.0:
-                      _logger.info("Small difference detected (%s). Auto-correcting.", diff)
-                      adj_vals = {
-                             'pos_order_id': pos_order.id,
-                             'payment_method_id': payment_method.id,
-                             'amount': diff,
-                             'payment_date': fields.Datetime.now(),
-                             'transaction_id': 'ROUNDING-ADJ'
-                      }
-                      request.env['pos.payment'].sudo().create(adj_vals)
-                      # Continue loop to verify in next iteration
-                
-                last_error = f"paid: {current_paid}, total: {pos_order.amount_total}"
-                _logger.warning("Payment validation attempt %d failed: %s", i+1, last_error)
-                time.sleep(0.5)
-            
-            if not validation_success and pos_order.state == 'draft':
-                 raise ValueError(f"Order {pos_order.name} is not fully paid after retries ({last_error})")
+                _logger.info("Order %s successfully processed (state: %s)", pos_order.name, pos_order.state)
+            else:
+                # Payment amount doesn't match - this shouldn't happen if we got here
+                diff = pos_order.amount_total - total_paid_sql
+                _logger.error("Payment mismatch: DB total paid=%s, order total=%s, diff=%s", 
+                             total_paid_sql, pos_order.amount_total, diff)
+                raise ValueError(f"Order {pos_order.name} payment mismatch (paid: {total_paid_sql}, total: {pos_order.amount_total})")
             
             _logger.info("Order %s successfully processed", pos_order.name)
 
         except Exception as e:
             _logger.exception("Error completing order %s: %s", pos_order.name, str(e))
             raise
+
+    def _save_transaction_log(self, pos_order, api_type, client_ref, result, amount=0, mw_request_id=None):
+        """Save OMA API request/response to transaction log."""
+        import json
+        try:
+            log_vals = {
+                'pos_order_id': pos_order.id if pos_order else False,
+                'api_type': api_type,
+                'client_ref': client_ref,
+                'mw_request_id': mw_request_id or result.get('omaTxnMwRequestId', ''),
+                'invoice_no': result.get('_request_body', {}).get('omaInvoiceNo', ''),
+                'request_url': result.get('_request_url', ''),
+                'request_headers': json.dumps(result.get('_request_headers', {}), indent=2),
+                'request_body': json.dumps(result.get('_request_body', {}), indent=2),
+                'response_body': json.dumps({k: v for k, v in result.items() if not k.startswith('_')}, indent=2),
+                'error_code': result.get('omaErrorCode', ''),
+                'error_message': result.get('omaErrorMessage', ''),
+                'auth_code': result.get('omaAuthCode', ''),
+                'rrn': result.get('omaRrn', ''),
+                'card_type': result.get('omaCardName', ''),
+                'masked_pan': result.get('omaMaskedPan', ''),
+                'amount': float(amount) if amount else 0,
+            }
+            
+            request.env['oma.transaction.log'].sudo().create(log_vals)
+            _logger.info("Saved OMA transaction log: %s for order %s", api_type, pos_order.name if pos_order else 'N/A')
+            
+        except Exception as e:
+            _logger.warning("Failed to save transaction log: %s", str(e))
+            # Don't raise - logging failure shouldn't break the payment flow

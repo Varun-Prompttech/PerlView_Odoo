@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Tree View -->
+    <record id="view_oma_transaction_log_tree" model="ir.ui.view">
+        <field name="name">oma.transaction.log.list</field>
+        <field name="model">oma.transaction.log</field>
+        <field name="arch" type="xml">
+            <list string="OMA Transaction Logs" default_order="create_date desc" create="false">
+                <field name="create_date" string="Date/Time"/>
+                <field name="order_name"/>
+                <field name="api_type"/>
+                <field name="client_ref"/>
+                <field name="mw_request_id"/>
+                <field name="amount"/>
+                <field name="error_code"/>
+                <field name="error_message"/>
+                <field name="is_success" widget="boolean_toggle"/>
+                <field name="auth_code"/>
+                <field name="masked_pan"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Form View -->
+    <record id="view_oma_transaction_log_form" model="ir.ui.view">
+        <field name="name">oma.transaction.log.form</field>
+        <field name="model">oma.transaction.log</field>
+        <field name="arch" type="xml">
+            <form string="OMA Transaction Log">
+                <sheet>
+                    <div class="oe_button_box" name="button_box"/>
+                    <group>
+                        <group string="Transaction Info">
+                            <field name="pos_order_id"/>
+                            <field name="api_type"/>
+                            <field name="create_date" string="Timestamp"/>
+                            <field name="is_success"/>
+                        </group>
+                        <group string="Identifiers">
+                            <field name="client_ref"/>
+                            <field name="mw_request_id"/>
+                            <field name="invoice_no"/>
+                        </group>
+                    </group>
+                    <group>
+                        <group string="Response Summary">
+                            <field name="error_code"/>
+                            <field name="error_message"/>
+                            <field name="amount"/>
+                        </group>
+                        <group string="Card Details">
+                            <field name="auth_code"/>
+                            <field name="rrn"/>
+                            <field name="card_type"/>
+                            <field name="masked_pan"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Request">
+                            <group>
+                                <field name="request_url" widget="url"/>
+                            </group>
+                            <group string="Request Headers">
+                                <field name="request_headers" nolabel="1" widget="text"/>
+                            </group>
+                            <group string="Request Body">
+                                <field name="request_body" nolabel="1" widget="text"/>
+                            </group>
+                        </page>
+                        <page string="Response">
+                            <group string="Response Body">
+                                <field name="response_body" nolabel="1" widget="text"/>
+                            </group>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Search View -->
+    <record id="view_oma_transaction_log_search" model="ir.ui.view">
+        <field name="name">oma.transaction.log.search</field>
+        <field name="model">oma.transaction.log</field>
+        <field name="arch" type="xml">
+            <search string="OMA Transaction Logs">
+                <field name="order_name"/>
+                <field name="client_ref"/>
+                <field name="mw_request_id"/>
+                <field name="error_code"/>
+                <filter name="filter_success" string="Success" domain="[('is_success', '=', True)]"/>
+                <filter name="filter_failed" string="Failed" domain="[('is_success', '=', False)]"/>
+                <separator/>
+                <filter name="filter_initiate" string="Initiate" domain="[('api_type', '=', 'initiate')]"/>
+                <filter name="filter_inquiry" string="Inquiry" domain="[('api_type', '=', 'inquiry')]"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_order" string="Order" context="{'group_by': 'pos_order_id'}"/>
+                    <filter name="group_api_type" string="API Type" context="{'group_by': 'api_type'}"/>
+                    <filter name="group_success" string="Success" context="{'group_by': 'is_success'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Action -->
+    <record id="action_oma_transaction_log" model="ir.actions.act_window">
+        <field name="name">OMA Transaction Logs</field>
+        <field name="res_model">oma.transaction.log</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_oma_transaction_log_search"/>
+        <field name="context">{}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No OMA transaction logs yet.
+            </p>
+            <p>
+                Transaction logs are created automatically when OMA payments are processed.
+            </p>
+        </field>
+    </record>
+
+    <!-- Menu Item under Point of Sale -->
+    <menuitem id="menu_oma_transaction_log"
+              name="OMA Transaction Logs"
+              parent="point_of_sale.menu_point_rep"
+              action="action_oma_transaction_log"
+              sequence="100"/>
+</odoo>
