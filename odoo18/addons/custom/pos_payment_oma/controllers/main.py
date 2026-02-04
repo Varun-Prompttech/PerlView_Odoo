@@ -146,13 +146,31 @@ class OmaPaymentController(http.Controller):
                  if not order_ref:
                       order_ref = f"POS-{pos_config.id}-{fields.Datetime.now().strftime('%Y%m%d%H%M%S')}"
 
+            # Prepare partner (assign default Guest if missing due to Kiosk mode)
+            partner_id = order_data.get('partner_id')
+            if not partner_id:
+                guest_partner = request.env['res.partner'].sudo().search([
+                    ('name', 'ilike', 'Guest'), 
+                    ('active', '=', True)
+                ], limit=1)
+                
+                if not guest_partner:
+                    guest_partner = request.env['res.partner'].sudo().create({
+                        'name': 'Guest Customer',
+                        'active': True,
+                        'customer_rank': 1,
+                    })
+                partner_id = guest_partner.id
+                _logger.info("Assigned default partner %s (ID: %s) to anonymous order", 
+                             guest_partner.name, partner_id)
+
             # Prepare order values
             order_vals = {
                 'name': order_ref,
                 'pos_reference': order_ref,
                 'config_id': pos_config.id,
                 'session_id': session.id,
-                'partner_id': order_data.get('partner_id') or False,
+                'partner_id': partner_id or False,
                 'pricelist_id': pos_config.pricelist_id.id,
                 'lines': [],
                 'uuid': order_data.get('uuid') or False,
