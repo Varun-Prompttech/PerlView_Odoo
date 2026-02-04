@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+    <t t-name="pos_payment_oma.ConfirmationPage" t-inherit="pos_self_order.ConfirmationPage" t-inherit-mode="extension">
+        <xpath expr="//div[hasclass('d-inline-flex')]" position="replace">
+            <div class="d-inline-flex flex-column border rounded py-4 px-5 bg-view mb-3">
+                <span class="fs-2 text-muted">Order Reference</span>
+                <span class="fs-1 fw-bold text-primary" t-esc="confirmedOrder.pos_reference || confirmedOrder.name" />
+                <span class="fs-4 text-muted mt-2" t-if="confirmedOrder.tracking_number">Token: <t t-esc="confirmedOrder.tracking_number"/></span>
+            </div>
+        </xpath>
+    </t>
+</templates>

@@ -30,6 +30,7 @@
             'pos_payment_oma/static/src/app/pages/payment_page/payment_page.js',
             'pos_payment_oma/static/src/app/pages/payment_page/payment_page.xml',
             'pos_payment_oma/static/src/app/pages/payment_page/payment_page.scss',
+            'pos_payment_oma/static/src/app/pages/confirmation_page/confirmation_page.xml',
         ],
     },
     'installable': True,
