@@ -85,18 +85,18 @@
         <!-- Update footer buttons for OMA -->
         <xpath expr="//div[hasclass('px-3')][hasclass('py-4')]" position="replace">
             <div class="px-3 py-4 d-flex gap-2 justify-content-center">
-                <!-- Back button - shown only when selecting payment methods -->
+                <!-- Back button - shown when selecting or on error (not processing) -->
                 <button class="btn btn-secondary btn-lg px-5" 
-                        t-if="state.selection" 
+                        t-if="state.selection or (omaState and omaState.error and !omaState.processing)" 
                         t-on-click="() => this.router.back()">
                     <i class="fa fa-arrow-left me-2"/>Back
                 </button>
                 
-                <!-- Start New Order button - shown on error (cancel order and go to start) -->
+                <!-- Retry button - shown on error -->
                 <button class="btn btn-primary btn-lg px-5" 
                         t-if="omaState and omaState.error and !omaState.processing" 
-                        t-on-click="cancelOrderAndStartNew">
-                    <i class="fa fa-plus me-2"/>Start New Order
+                        t-on-click="retryOmaPayment">
+                    <i class="fa fa-refresh me-2"/>Retry Payment
                 </button>
                 
                 <!-- Cancel button - shown during processing -->

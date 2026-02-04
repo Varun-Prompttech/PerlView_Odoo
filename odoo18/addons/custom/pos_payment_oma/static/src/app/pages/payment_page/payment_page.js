@@ -101,6 +101,7 @@ patch(PaymentPage.prototype, {
                 order: this.selfOrder.currentOrder.serialize({ orm: true }),
                 access_token: this.selfOrder.access_token,
                 payment_method_id: this.state.paymentMethodId,
+                retry_count: this.omaState.retryCount || 0,
             });
 
             this.stopTimer();
@@ -141,23 +142,14 @@ patch(PaymentPage.prototype, {
         }
     },
 
-    cancelOrderAndStartNew() {
-        // Clear current state
-        this.stopTimer();
-        this.omaState.processing = false;
+    retryOmaPayment() {
+        // Increment retry counter to generate unique client reference
+        this.omaState.retryCount = (this.omaState.retryCount || 0) + 1;
         this.omaState.error = false;
         this.omaState.success = false;
         this.omaState.message = "";
         this.selfOrder.paymentError = false;
-
-        // Clear the current order to start fresh
-        if (this.selfOrder.currentOrder) {
-            this.selfOrder.currentOrder.lines = [];
-            this.selfOrder.currentOrder.amount_total = 0;
-        }
-
-        // Navigate to the start/landing page
-        this.router.navigate("landing");
+        this.startOmaPayment();
     },
 
     cancelOmaPayment() {

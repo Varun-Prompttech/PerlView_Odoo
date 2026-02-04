@@ -22,7 +22,7 @@ class OmaPaymentController(http.Controller):
         methods=['POST'],
         csrf=False
     )
-    def process_oma_payment(self, pos_config_id, order, access_token, payment_method_id, **kwargs):
+    def process_oma_payment(self, pos_config_id, order, access_token, payment_method_id, retry_count=0, **kwargs):
         """
         Process OMA ECR payment for Kiosk order.
         
@@ -68,8 +68,8 @@ class OmaPaymentController(http.Controller):
                 _logger.error("Order %s has zero or negative amount: %s", pos_order.name, amount)
                 return {'success': False, 'error': f'Order amount must be greater than 0 (got {amount})'}
 
-            # Call OMA ECR API
-            ecr_result = self._call_oma_ecr_api(payment_method, amount, pos_order)
+            # Call OMA ECR API with retry_count for unique client reference
+            ecr_result = self._call_oma_ecr_api(payment_method, amount, pos_order, retry_count)
 
             if ecr_result.get('success'):
                 # Create payment and complete order
@@ -210,7 +210,7 @@ class OmaPaymentController(http.Controller):
             _logger.exception("Error creating order: %s", str(e))
             return None
 
-    def _call_oma_ecr_api(self, payment_method, amount, pos_order):
+    def _call_oma_ecr_api(self, payment_method, amount, pos_order, retry_count=0):
         """
         Call OMA ECR API to process payment via OMAService.
         """
@@ -248,11 +248,16 @@ class OmaPaymentController(http.Controller):
             )
 
             # Initiate Transaction - use order name as client reference
-            client_ref = pos_order.pos_reference or pos_order.name or f"ORDER-{pos_order.id}"
+            # Append retry count to make each retry attempt unique for OMA API
+            base_ref = pos_order.pos_reference or pos_order.name or f"ORDER-{pos_order.id}"
+            if retry_count > 0:
+                client_ref = f"{base_ref}-R{retry_count}"
+            else:
+                client_ref = base_ref
             invoice_no = str(pos_order.id).zfill(6)  # 6-digit invoice number
             
-            _logger.info("Initiating OMA Transaction for Ref: %s, Invoice: %s, Amount: %s", 
-                        client_ref, invoice_no, amount)
+            _logger.info("Initiating OMA Transaction for Ref: %s, Invoice: %s, Amount: %s, Retry: %s", 
+                        client_ref, invoice_no, amount, retry_count)
             
             result = service.initiate_transaction(amount, client_ref, invoice_no)
             
