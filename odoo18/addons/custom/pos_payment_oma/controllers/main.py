@@ -51,14 +51,22 @@ class OmaPaymentController(http.Controller):
             if not pos_order:
                 return {'success': False, 'error': 'Failed to create order'}
 
-            _logger.info("Processing OMA payment for order %s (ID: %s), amount: %s", 
-                        pos_order.name, pos_order.id, pos_order.amount_total)
+            # Flush order to ensure it's in DB with stable ID
+            request.env['pos.order'].flush_model()
+            request.env.cr.commit()
+            
+            # Re-read order to ensure we have latest state
+            pos_order = request.env['pos.order'].sudo().browse(pos_order.id)
+            
+            _logger.info("Processing OMA payment for order %s (ID: %s), amount: %s, lines: %d", 
+                        pos_order.name, pos_order.id, pos_order.amount_total, len(pos_order.lines))
 
             # Calculate amount
             amount = pos_order.amount_total
 
             if amount <= 0:
-                return {'success': False, 'error': 'Order amount must be greater than 0'}
+                _logger.error("Order %s has zero or negative amount: %s", pos_order.name, amount)
+                return {'success': False, 'error': f'Order amount must be greater than 0 (got {amount})'}
 
             # Call OMA ECR API
             ecr_result = self._call_oma_ecr_api(payment_method, amount, pos_order)
@@ -102,7 +110,12 @@ class OmaPaymentController(http.Controller):
                     ('config_id', '=', pos_config.id),
                 ], limit=1)
                 if existing_order:
-                    _logger.info("Found existing order: %s", existing_order.name)
+                    _logger.info("Found existing order: %s (ID: %s)", existing_order.name, existing_order.id)
+                    # Fix invalid name if needed
+                    if not existing_order.name or existing_order.name == '/':
+                        new_name = request.env['ir.sequence'].sudo().next_by_code('pos.order') or f"POS-{pos_config.id}-{fields.Datetime.now().strftime('%Y%m%d%H%M%S')}"
+                        existing_order.write({'name': new_name, 'pos_reference': new_name})
+                        _logger.info("Fixed order name from '/' to '%s'", new_name)
                     return existing_order
 
             # Also check by access_token if provided
@@ -112,7 +125,12 @@ class OmaPaymentController(http.Controller):
                     ('config_id', '=', pos_config.id),
                 ], limit=1)
                 if existing_order:
-                    _logger.info("Found existing order by access_token: %s", existing_order.name)
+                    _logger.info("Found existing order by access_token: %s (ID: %s)", existing_order.name, existing_order.id)
+                    # Fix invalid name if needed
+                    if not existing_order.name or existing_order.name == '/':
+                        new_name = request.env['ir.sequence'].sudo().next_by_code('pos.order') or f"POS-{pos_config.id}-{fields.Datetime.now().strftime('%Y%m%d%H%M%S')}"
+                        existing_order.write({'name': new_name, 'pos_reference': new_name})
+                        _logger.info("Fixed order name from '/' to '%s'", new_name)
                     return existing_order
 
             # Create new order from the self-order data
@@ -374,8 +392,23 @@ class OmaPaymentController(http.Controller):
             
             # Force flush to ensure payment is in DB
             request.env['pos.payment'].flush_model()
+            request.env.cr.commit()  # Force commit to DB
             
             _logger.info("Payment created: ID %s, amount %s", payment.id, payment.amount)
+            
+            # Verify payment was actually created by re-reading from DB
+            verify_payment = request.env['pos.payment'].sudo().browse(payment.id)
+            _logger.info("Payment verification: exists=%s, order_id=%s, amount=%s", 
+                        verify_payment.exists(), verify_payment.pos_order_id.id if verify_payment.exists() else 'N/A',
+                        verify_payment.amount if verify_payment.exists() else 'N/A')
+            
+            # Also verify via direct SQL
+            request.env.cr.execute("""
+                SELECT id, pos_order_id, amount FROM pos_payment 
+                WHERE pos_order_id = %s
+            """, (pos_order.id,))
+            payments_in_db = request.env.cr.fetchall()
+            _logger.info("Payments in DB for order %s: %s", pos_order.id, payments_in_db)
             
             # Retry loop for validation (handling potential race/cache issues)
             import time
@@ -384,6 +417,8 @@ class OmaPaymentController(http.Controller):
             
             for i in range(5):
                 pos_order.invalidate_recordset(['amount_paid', 'payment_ids'])
+                # Re-read order from DB
+                pos_order = request.env['pos.order'].sudo().browse(pos_order.id)
                 computed_paid = sum(pos_order.payment_ids.mapped('amount'))
                 current_paid = computed_paid
                 
