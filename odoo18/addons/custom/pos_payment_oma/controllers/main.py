@@ -523,3 +523,41 @@ class OmaPaymentController(http.Controller):
         except Exception as e:
             _logger.warning("Failed to save transaction log: %s", str(e))
             # Don't raise - logging failure shouldn't break the payment flow
+
+    @http.route('/pos_payment_oma/download_invoice/<string:order_access_token>', type='http', auth='public', website=True)
+    def download_invoice(self, order_access_token, **kwargs):
+        """Serve the invoice PDF for the given order access token."""
+        _logger.info("Invoice download requested for token: %s", order_access_token)
+        
+        pos_order = request.env['pos.order'].sudo().search([('access_token', '=', order_access_token)], limit=1)
+        
+        if not pos_order:
+            _logger.warning("Invoice download failed: Order not found for token %s", order_access_token)
+            return request.not_found()
+            
+        if not pos_order.account_move:
+            _logger.warning("Invoice download failed: No invoice generated for order %s", pos_order.name)
+            # Try to generate it if missing but order is paid
+            if pos_order.state in ['paid', 'done']:
+                try:
+                    pos_order._generate_pos_order_invoice()
+                    request.env.cr.commit()
+                except Exception as e:
+                    _logger.error("Failed to generate missing invoice for order %s: %s", pos_order.name, str(e))
+                    return request.make_response("Invoice Generation Error", headers=[('Content-Type', 'text/plain')])
+            else:
+                return request.make_response("Order not invoiced yet", headers=[('Content-Type', 'text/plain')])
+
+        if not pos_order.account_move:
+             return request.make_response("Invoice not found", headers=[('Content-Type', 'text/plain')])
+
+        # Render the PDF
+        pdf_content, _ = request.env['ir.actions.report'].sudo()._render_qweb_pdf('account.account_invoices', [pos_order.account_move.id])
+        
+        pdfhttpheaders = [
+            ('Content-Type', 'application/pdf'),
+            ('Content-Length', len(pdf_content)),
+            ('Content-Disposition', f'inline; filename="Invoice-{pos_order.name}.pdf"'),
+        ]
+        
+        return request.make_response(pdf_content, headers=pdfhttpheaders)

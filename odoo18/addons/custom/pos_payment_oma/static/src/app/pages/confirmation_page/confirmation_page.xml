@@ -7,6 +7,14 @@
                 <span class="fs-1 fw-bold text-primary" t-esc="confirmedOrder.pos_reference || confirmedOrder.name" />
                 <span class="fs-4 text-muted mt-2" t-if="confirmedOrder.tracking_number">Token: <t t-esc="confirmedOrder.tracking_number"/></span>
             </div>
+            <div class="d-flex gap-2 mb-4">
+                <button class="btn btn-secondary btn-lg flex-fill" t-on-click="previewInvoice">
+                    <i class="fa fa-file-pdf-o me-2"/> Preview Invoice
+                </button>
+                <button class="btn btn-secondary btn-lg flex-fill" t-on-click="printInvoice">
+                    <i class="fa fa-print me-2"/> Print Invoice
+                </button>
+            </div>
         </xpath>
     </t>
 </templates>
