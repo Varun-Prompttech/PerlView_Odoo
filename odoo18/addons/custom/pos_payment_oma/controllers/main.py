@@ -69,7 +69,20 @@ class OmaPaymentController(http.Controller):
                 return {'success': False, 'error': f'Order amount must be greater than 0 (got {amount})'}
 
             # Call OMA ECR API with retry_count for unique client reference
-            ecr_result = self._call_oma_ecr_api(payment_method, amount, pos_order, retry_count)
+            # ecr_result = self._call_oma_ecr_api(payment_method, amount, pos_order, retry_count)
+            
+            # --- AUTO APPROVE FOR TESTING ---
+            _logger.info("AUTO-APPROVE: Simulating successful payment for %s", pos_order.name)
+            ecr_result = {
+                'success': True,
+                'transaction_id': 'AUTO-TEST-' + str(fields.Datetime.now()),
+                'auth_code': 'TEST1234',
+                'rrn': 'TEST-RRN-999',
+                'card_type': 'TEST-VISA',
+                'masked_pan': '**** **** **** 1234',
+                'message': 'Approved (Test Mode)'
+            }
+            # --------------------------------
 
             if ecr_result.get('success'):
                 # Create payment and complete order
@@ -549,6 +562,7 @@ class OmaPaymentController(http.Controller):
                     'customer_rank': 1,
                 })
              pos_order.partner_id = guest_partner.id
+             request.env.cr.commit() # Commit partner assignment before invoice generation
              _logger.info("Assigned Guest partner to order %s for invoicing", pos_order.name)
 
         if not pos_order.account_move:

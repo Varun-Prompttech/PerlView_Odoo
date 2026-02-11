@@ -19,7 +19,6 @@
     'depends': ['point_of_sale', 'pos_self_order'],
     'data': [
         'security/ir.model.access.csv',
-        'views/res_config_settings_views.xml',
         'views/oma_transaction_log_views.xml',
         'views/report_invoice_thermal.xml',
         'data/pos_payment_data.xml',

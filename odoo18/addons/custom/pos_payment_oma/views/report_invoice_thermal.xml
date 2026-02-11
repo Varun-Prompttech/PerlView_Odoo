@@ -4,18 +4,19 @@
         <!-- Paper Format for 80mm Thermal Printer -->
         <record id="paperformat_thermal_80mm" model="report.paperformat">
             <field name="name">Thermal 80mm</field>
-            <field name="default" eval="True"/>
+            <field name="default" eval="False"/>
             <field name="format">custom</field>
             <field name="page_height">0</field>
             <field name="page_width">80</field>
             <field name="orientation">Portrait</field>
-            <field name="margin_top">2</field>
-            <field name="margin_bottom">2</field>
-            <field name="margin_left">2</field>
-            <field name="margin_right">2</field>
+            <field name="margin_top">0</field>
+            <field name="margin_bottom">0</field>
+            <field name="margin_left">0</field>
+            <field name="margin_right">0</field>
             <field name="header_line" eval="False"/>
             <field name="header_spacing">0</field>
             <field name="dpi">90</field>
+            <field name="disable_shrinking" eval="True"/>
         </record>
 
         <!-- Report Action -->
@@ -31,99 +32,73 @@
             <field name="binding_type">report</field>
         </record>
 
-        <!-- Thermal Template -->
+        <!-- Thermal Template matching Standard POS Receipt -->
         <template id="report_invoice_thermal">
             <t t-call="web.html_container">
                 <t t-foreach="docs" t-as="o">
-                    <div class="page" style="font-family: 'Courier New', Courier, monospace; font-size: 12px; width: 100%;">
+                    <div class="page" style="font-family: 'Arial', 'Helvetica', sans-serif; font-size: 14px; width: 100%;">
                         
                         <!-- Header -->
-                        <div class="text-center mb-2">
-                            <img t-if="o.company_id.logo" t-att-src="image_data_uri(o.company_id.logo)" style="max-height: 80px; max-width: 90%;" alt="Logo"/>
-                            <div class="fw-bold mt-1" style="font-size: 14px;" t-field="o.company_id.name"/>
-                            <div t-field="o.company_id.street"/>
-                            <div t-if="o.company_id.street2" t-field="o.company_id.street2"/>
-                            <div>
-                                <span t-if="o.company_id.city" t-field="o.company_id.city"/>
-                                <span t-if="o.company_id.state_id" t-field="o.company_id.state_id.name"/>
-                                <span t-if="o.company_id.country_id" t-field="o.company_id.country_id.name"/>
-                            </div>
-                            <div t-if="o.company_id.vat">TRN: <span t-field="o.company_id.vat"/></div>
+                        <div class="text-center mb-3">
+                            <img t-if="o.company_id.logo" t-att-src="image_data_uri(o.company_id.logo)" style="max-height: 70px; max-width: 90%; margin-bottom: 5px;" alt="Logo"/>
+                            <div class="fw-bold" style="font-size: 16px;" t-field="o.company_id.name"/>
+                            <div t-if="o.company_id.phone" t-field="o.company_id.phone"/>
+                            <div t-if="o.company_id.email" t-field="o.company_id.email"/>
+                            <div t-if="o.company_id.website" t-field="o.company_id.website"/>
+                            <br/>
+                            <div t-if="o.user_id">Served by <span t-field="o.user_id.name"/></div>
+                            <div t-if="o.partner_id">Customer: <span t-field="o.partner_id.name"/></div>
                         </div>
 
-                        <div class="text-center border-top border-bottom py-1 mb-2">
-                             <strong style="font-size: 14px;">TAX INVOICE</strong>
+                        <!-- Order Ref (Big) -->
+                        <div class="text-center mb-4">
+                            <span style="font-size: 24px; font-weight: bold;" t-field="o.name"/>
+                            <br/>
+                            <span class="text-muted" style="font-size: 12px;" t-field="o.invoice_date"/>
                         </div>
 
-                        <!-- Order Info -->
-                        <div class="mb-2">
-                            <div class="d-flex justify-content-between">
-                                <span>Invoice No:</span>
-                                <span class="fw-bold" t-field="o.name"/>
-                            </div>
-                            <div class="d-flex justify-content-between">
-                                <span>Date:</span>
-                                <span t-field="o.invoice_date"/>
-                            </div>
-                            <div class="d-flex justify-content-between" t-if="o.partner_id">
-                                <span>Customer:</span>
-                                <span t-esc="o.partner_id.name"/>
-                            </div>
-                             <div class="d-flex justify-content-between" t-if="o.partner_id.vat">
-                                <span>TRN:</span>
-                                <span t-esc="o.partner_id.vat"/>
-                            </div>
-                        </div>
-
-                        <!-- Lines -->
-                        <table class="table table-sm table-borderless mb-2" style="font-size: 11px;">
-                            <thead class="border-bottom">
-                                <tr>
-                                    <th class="text-start" style="width: 50%;">Item</th>
-                                    <th class="text-center" style="width: 15%;">Qty</th>
-                                    <th class="text-end" style="width: 35%;">Total</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr t-foreach="o.invoice_line_ids" t-as="line">
-                                    <t t-if="not line.display_type">
-                                        <td>
-                                            <span t-field="line.name"/>
-                                            <t t-if="line.discount">
+                        <!-- Lines (Standard POS Receipt Style) -->
+                        <div class="mb-4">
+                            <t t-foreach="o.invoice_line_ids" t-as="line">
+                                <t t-if="line.display_type == 'product' or not line.display_type">
+                                    <div class="mb-2 border-bottom pb-1 border-light">
+                                        <!-- Row 1: Name and Total Price -->
+                                        <div class="d-flex justify-content-between">
+                                            <span class="fw-bold text-wrap" style="width: 70%;" t-esc="line.product_id.display_name or line.name"/>
+                                            <span class="fw-bold text-nowrap" t-field="line.price_total"/>
+                                        </div>
+                                        <!-- Row 2: Qty x Unit Price -->
+                                        <div class="text-muted" style="font-size: 12px;">
+                                            <span t-field="line.quantity"/> x <span t-field="line.price_unit"/> / <span t-field="line.product_uom_id.name"/>
+                                            <t t-if="line.discount &gt; 0">
                                                 <br/>
-                                                <small class="text-muted">Disc: <span t-field="line.discount"/>%</small>
+                                                <span class="fst-italic">Disc: <span t-field="line.discount"/>%</span>
                                             </t>
-                                        </td>
-                                        <td class="text-center">
-                                            <span t-field="line.quantity"/>
-                                        </td>
-                                        <td class="text-end">
-                                            <span t-field="line.price_total"/>
-                                        </td>
-                                    </t>
-                                </tr>
-                            </tbody>
-                        </table>
+                                        </div>
+                                    </div>
+                                </t>
+                            </t>
+                        </div>
 
                         <!-- Totals -->
-                        <div class="border-top pt-1 mb-2">
+                        <div class="mb-3">
                              <div class="d-flex justify-content-between">
-                                <span>Subtotal (Excl. VAT):</span>
+                                <span>Subtotal</span>
                                 <span t-field="o.amount_untaxed"/>
                             </div>
-                             <div class="d-flex justify-content-between">
-                                <span>VAT Limit used:</span>
+                             <div class="d-flex justify-content-between text-muted" t-if="o.amount_tax > 0">
+                                <span>Tax</span>
                                 <span t-field="o.amount_tax"/>
                             </div>
-                             <div class="d-flex justify-content-between border-top border-dark mt-1 pt-1 fw-bold" style="font-size: 14px;">
-                                <span>Total (Incl. VAT):</span>
+                             <div class="d-flex justify-content-between border-top border-dark mt-2 pt-2" style="font-size: 18px; font-weight: bold;">
+                                <span>TOTAL</span>
                                 <span t-field="o.amount_total"/>
                             </div>
                         </div>
                         
-                         <div class="text-center mt-3 mb-2" style="font-size: 10px;">
-                            Thank you for your visit!<br/>
-                            Generated by Odoo
+                        <!-- Footer -->
+                        <div class="text-center mt-4 text-muted" style="font-size: 11px;">
+                            Powered by Odoo
                         </div>
 
                     </div>
