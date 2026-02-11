@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <!-- Paper Format for 80mm Thermal Printer -->
+        <record id="paperformat_thermal_80mm" model="report.paperformat">
+            <field name="name">Thermal 80mm</field>
+            <field name="default" eval="True"/>
+            <field name="format">custom</field>
+            <field name="page_height">0</field>
+            <field name="page_width">80</field>
+            <field name="orientation">Portrait</field>
+            <field name="margin_top">2</field>
+            <field name="margin_bottom">2</field>
+            <field name="margin_left">2</field>
+            <field name="margin_right">2</field>
+            <field name="header_line" eval="False"/>
+            <field name="header_spacing">0</field>
+            <field name="dpi">90</field>
+        </record>
+
+        <!-- Report Action -->
+        <record id="action_report_pos_invoice_thermal" model="ir.actions.report">
+            <field name="name">Thermal Invoice</field>
+            <field name="model">account.move</field>
+            <field name="report_type">qweb-pdf</field>
+            <field name="report_name">pos_payment_oma.report_invoice_thermal</field>
+            <field name="report_file">pos_payment_oma.report_invoice_thermal</field>
+            <field name="print_report_name">'Invoice - %s' % (object.name)</field>
+            <field name="paperformat_id" ref="pos_payment_oma.paperformat_thermal_80mm"/>
+            <field name="binding_model_id" ref="account.model_account_move"/>
+            <field name="binding_type">report</field>
+        </record>
+
+        <!-- Thermal Template -->
+        <template id="report_invoice_thermal">
+            <t t-call="web.html_container">
+                <t t-foreach="docs" t-as="o">
+                    <div class="page" style="font-family: 'Courier New', Courier, monospace; font-size: 12px; width: 100%;">
+                        
+                        <!-- Header -->
+                        <div class="text-center mb-2">
+                            <img t-if="o.company_id.logo" t-att-src="image_data_uri(o.company_id.logo)" style="max-height: 80px; max-width: 90%;" alt="Logo"/>
+                            <div class="fw-bold mt-1" style="font-size: 14px;" t-field="o.company_id.name"/>
+                            <div t-field="o.company_id.street"/>
+                            <div t-if="o.company_id.street2" t-field="o.company_id.street2"/>
+                            <div>
+                                <span t-if="o.company_id.city" t-field="o.company_id.city"/>
+                                <span t-if="o.company_id.state_id" t-field="o.company_id.state_id.name"/>
+                                <span t-if="o.company_id.country_id" t-field="o.company_id.country_id.name"/>
+                            </div>
+                            <div t-if="o.company_id.vat">TRN: <span t-field="o.company_id.vat"/></div>
+                        </div>
+
+                        <div class="text-center border-top border-bottom py-1 mb-2">
+                             <strong style="font-size: 14px;">TAX INVOICE</strong>
+                        </div>
+
+                        <!-- Order Info -->
+                        <div class="mb-2">
+                            <div class="d-flex justify-content-between">
+                                <span>Invoice No:</span>
+                                <span class="fw-bold" t-field="o.name"/>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span>Date:</span>
+                                <span t-field="o.invoice_date"/>
+                            </div>
+                            <div class="d-flex justify-content-between" t-if="o.partner_id">
+                                <span>Customer:</span>
+                                <span t-esc="o.partner_id.name"/>
+                            </div>
+                             <div class="d-flex justify-content-between" t-if="o.partner_id.vat">
+                                <span>TRN:</span>
+                                <span t-esc="o.partner_id.vat"/>
+                            </div>
+                        </div>
+
+                        <!-- Lines -->
+                        <table class="table table-sm table-borderless mb-2" style="font-size: 11px;">
+                            <thead class="border-bottom">
+                                <tr>
+                                    <th class="text-start" style="width: 50%;">Item</th>
+                                    <th class="text-center" style="width: 15%;">Qty</th>
+                                    <th class="text-end" style="width: 35%;">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr t-foreach="o.invoice_line_ids" t-as="line">
+                                    <t t-if="not line.display_type">
+                                        <td>
+                                            <span t-field="line.name"/>
+                                            <t t-if="line.discount">
+                                                <br/>
+                                                <small class="text-muted">Disc: <span t-field="line.discount"/>%</small>
+                                            </t>
+                                        </td>
+                                        <td class="text-center">
+                                            <span t-field="line.quantity"/>
+                                        </td>
+                                        <td class="text-end">
+                                            <span t-field="line.price_total"/>
+                                        </td>
+                                    </t>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <!-- Totals -->
+                        <div class="border-top pt-1 mb-2">
+                             <div class="d-flex justify-content-between">
+                                <span>Subtotal (Excl. VAT):</span>
+                                <span t-field="o.amount_untaxed"/>
+                            </div>
+                             <div class="d-flex justify-content-between">
+                                <span>VAT Limit used:</span>
+                                <span t-field="o.amount_tax"/>
+                            </div>
+                             <div class="d-flex justify-content-between border-top border-dark mt-1 pt-1 fw-bold" style="font-size: 14px;">
+                                <span>Total (Incl. VAT):</span>
+                                <span t-field="o.amount_total"/>
+                            </div>
+                        </div>
+                        
+                         <div class="text-center mt-3 mb-2" style="font-size: 10px;">
+                            Thank you for your visit!<br/>
+                            Generated by Odoo
+                        </div>
+
+                    </div>
+                </t>
+            </t>
+        </template>
+    </data>
+</odoo>

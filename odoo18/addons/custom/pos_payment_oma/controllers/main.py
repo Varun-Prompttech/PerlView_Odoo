@@ -534,7 +534,23 @@ class OmaPaymentController(http.Controller):
         if not pos_order:
             _logger.warning("Invoice download failed: Order not found for token %s", order_access_token)
             return request.not_found()
-            
+
+        # Fix missing partner issue for invoicing
+        if not pos_order.partner_id:
+             guest_partner = request.env['res.partner'].sudo().search([
+                ('name', 'ilike', 'Guest'), 
+                ('active', '=', True)
+            ], limit=1)
+             
+             if not guest_partner:
+                guest_partner = request.env['res.partner'].sudo().create({
+                    'name': 'Guest Customer',
+                    'active': True,
+                    'customer_rank': 1,
+                })
+             pos_order.partner_id = guest_partner.id
+             _logger.info("Assigned Guest partner to order %s for invoicing", pos_order.name)
+
         if not pos_order.account_move:
             _logger.warning("Invoice download failed: No invoice generated for order %s", pos_order.name)
             # Try to generate it if missing but order is paid
@@ -544,15 +560,16 @@ class OmaPaymentController(http.Controller):
                     request.env.cr.commit()
                 except Exception as e:
                     _logger.error("Failed to generate missing invoice for order %s: %s", pos_order.name, str(e))
-                    return request.make_response("Invoice Generation Error", headers=[('Content-Type', 'text/plain')])
+                     # Fallback: if we still can't generate it, return error
+                    return request.make_response(f"Invoice Generation Error: {str(e)}", headers=[('Content-Type', 'text/plain')])
             else:
                 return request.make_response("Order not invoiced yet", headers=[('Content-Type', 'text/plain')])
 
         if not pos_order.account_move:
              return request.make_response("Invoice not found", headers=[('Content-Type', 'text/plain')])
 
-        # Render the PDF
-        pdf_content, _ = request.env['ir.actions.report'].sudo()._render_qweb_pdf('account.account_invoices', [pos_order.account_move.id])
+        # Render the Thermal PDF
+        pdf_content, _ = request.env['ir.actions.report'].sudo()._render_qweb_pdf('pos_payment_oma.report_invoice_thermal', [pos_order.account_move.id])
         
         pdfhttpheaders = [
             ('Content-Type', 'application/pdf'),
