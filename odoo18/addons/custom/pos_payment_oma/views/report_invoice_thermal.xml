@@ -38,6 +38,9 @@
                 <t t-foreach="docs" t-as="o">
                     <div class="page" style="font-family: 'Arial', 'Helvetica', sans-serif; font-size: 14px; width: 100%;">
                         
+                        <!-- POS Specific Logic -->
+                        <t t-set="pos_order" t-value="o.pos_order_ids[0] if o.pos_order_ids else None"/>
+
                         <!-- Header -->
                         <div class="text-center mb-3">
                             <img t-if="o.company_id.logo" t-att-src="image_data_uri(o.company_id.logo)" style="max-height: 70px; max-width: 90%; margin-bottom: 5px;" alt="Logo"/>
@@ -47,12 +50,21 @@
                             <div t-if="o.company_id.website" t-field="o.company_id.website"/>
                             <br/>
                             <div t-if="o.user_id">Served by <span t-field="o.user_id.name"/></div>
-                            <div t-if="o.partner_id">Customer: <span t-field="o.partner_id.name"/></div>
+                            <!-- Table Info -->
+                            <div t-if="pos_order and pos_order.table_id">
+                                <span t-field="pos_order.table_id.name"/>, Guests: <span t-field="pos_order.customer_count"/>
+                            </div>
                         </div>
 
                         <!-- Order Ref (Big) -->
                         <div class="text-center mb-4">
-                            <span style="font-size: 24px; font-weight: bold;" t-field="o.name"/>
+                            <!-- Use POS Reference if available (e.g. 00061-001-0001) or Tracking Number (101) -->
+                            <t t-if="pos_order">
+                                <span style="font-size: 24px; font-weight: bold;" t-esc="pos_order.tracking_number or pos_order.pos_reference"/>
+                            </t>
+                            <t t-else="">
+                                <span style="font-size: 20px; font-weight: bold;" t-field="o.name"/>
+                            </t>
                             <br/>
                             <span class="text-muted" style="font-size: 12px;" t-field="o.invoice_date"/>
                         </div>
@@ -94,11 +106,32 @@
                                 <span>TOTAL</span>
                                 <span t-field="o.amount_total"/>
                             </div>
+                            
+                            <!-- Payment Details (if POS Order linked) -->
+                            <t t-if="pos_order">
+                                <t t-foreach="pos_order.payment_ids" t-as="payment">
+                                    <div class="d-flex justify-content-between text-muted mt-1" style="font-size: 12px;">
+                                        <span t-field="payment.payment_method_id.name"/>
+                                        <span t-field="payment.amount" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                    </div>
+                                </t>
+                                <div class="d-flex justify-content-between text-muted mt-1" style="font-size: 12px;" t-if="pos_order.amount_return > 0">
+                                    <span>Change</span>
+                                    <span t-field="pos_order.amount_return" t-options='{"widget": "monetary", "display_currency": o.currency_id}'/>
+                                </div>
+                            </t>
                         </div>
                         
                         <!-- Footer -->
                         <div class="text-center mt-4 text-muted" style="font-size: 11px;">
                             Powered by Odoo
+                             <br/>
+                            <t t-if="pos_order">
+                                <span t-field="pos_order.pos_reference"/>
+                            </t>
+                            <t t-else="">
+                                <span t-field="o.name"/>
+                            </t>
                         </div>
 
                     </div>

@@ -20,6 +20,7 @@
     'data': [
         'security/ir.model.access.csv',
         'views/oma_transaction_log_views.xml',
+        'views/pos_config_views.xml',
         'views/report_invoice_thermal.xml',
         'data/pos_payment_data.xml',
     ],
@@ -32,6 +33,7 @@
             'pos_payment_oma/static/src/app/pages/payment_page/payment_page.scss',
             'pos_payment_oma/static/src/app/pages/confirmation_page/confirmation_page.xml',
             'pos_payment_oma/static/src/app/pages/confirmation_page/confirmation_page.js',
+            'pos_payment_oma/static/src/app/screens/receipt_screen/receipt/pos_order_receipt_templates.xml',
         ],
     },
     'installable': True,

@@ -7,6 +7,9 @@ Handles ECR payment API calls for Kiosk self-order.
 
 import logging
 import json
+import subprocess
+import tempfile
+import os
 from odoo import http, fields
 from odoo.http import request
 
@@ -69,20 +72,7 @@ class OmaPaymentController(http.Controller):
                 return {'success': False, 'error': f'Order amount must be greater than 0 (got {amount})'}
 
             # Call OMA ECR API with retry_count for unique client reference
-            # ecr_result = self._call_oma_ecr_api(payment_method, amount, pos_order, retry_count)
-            
-            # --- AUTO APPROVE FOR TESTING ---
-            _logger.info("AUTO-APPROVE: Simulating successful payment for %s", pos_order.name)
-            ecr_result = {
-                'success': True,
-                'transaction_id': 'AUTO-TEST-' + str(fields.Datetime.now()),
-                'auth_code': 'TEST1234',
-                'rrn': 'TEST-RRN-999',
-                'card_type': 'TEST-VISA',
-                'masked_pan': '**** **** **** 1234',
-                'message': 'Approved (Test Mode)'
-            }
-            # --------------------------------
+            ecr_result = self._call_oma_ecr_api(payment_method, amount, pos_order, retry_count)
 
             if ecr_result.get('success'):
                 # Create payment and complete order
@@ -111,6 +101,13 @@ class OmaPaymentController(http.Controller):
             _logger.exception("OMA Payment Error: %s", str(e))
             return {'success': False, 'error': str(e)}
 
+    def _get_next_kiosk_sequence(self, pos_config):
+        """Generate a simple sequence number for Kiosk orders."""
+        # This is a simple implementation. Ideally use ir.sequence per config.
+        # Count orders for this config to get next number
+        count = request.env['pos.order'].sudo().search_count([('config_id', '=', pos_config.id)])
+        return count + 1
+
     def _get_or_create_order(self, pos_config, order_data):
         """Get existing order or create a new one from the order data."""
         try:
@@ -124,11 +121,20 @@ class OmaPaymentController(http.Controller):
                 ], limit=1)
                 if existing_order:
                     _logger.info("Found existing order: %s (ID: %s)", existing_order.name, existing_order.id)
-                    # Fix invalid name if needed
-                    if not existing_order.name or existing_order.name == '/':
-                        new_name = request.env['ir.sequence'].sudo().next_by_code('pos.order') or f"POS-{pos_config.id}-{fields.Datetime.now().strftime('%Y%m%d%H%M%S')}"
-                        existing_order.write({'name': new_name, 'pos_reference': new_name})
-                        _logger.info("Fixed order name from '/' to '%s'", new_name)
+                    # Fix invalid name or "Furniture Shop" name if needed
+                    # Use case-insensitive check
+                    is_furniture = 'furniture' in existing_order.name.lower() if existing_order.name else False
+                    if not existing_order.name or existing_order.name == '/' or is_furniture:
+                        # Generate new Kiosk reference
+                        prefix = pos_config.name if pos_config.name and 'furniture' not in pos_config.name.lower() else 'Kiosk'
+                        seq_number = self._get_next_kiosk_sequence(pos_config)
+                        new_name = f"{prefix} {seq_number}"
+                        
+                        # Use SQL to force rename as name might be readonly/restricted in ORM
+                        request.env.cr.execute("UPDATE pos_order SET name = %s, pos_reference = %s WHERE id = %s", (new_name, new_name, existing_order.id))
+                        request.env.cr.commit()
+                        existing_order.invalidate_recordset()
+                        _logger.info("Forced existing order rename from '%s' to '%s' via SQL", existing_order.name, new_name)
                     return existing_order
 
             # Also check by access_token if provided
@@ -139,11 +145,19 @@ class OmaPaymentController(http.Controller):
                 ], limit=1)
                 if existing_order:
                     _logger.info("Found existing order by access_token: %s (ID: %s)", existing_order.name, existing_order.id)
-                    # Fix invalid name if needed
-                    if not existing_order.name or existing_order.name == '/':
-                        new_name = request.env['ir.sequence'].sudo().next_by_code('pos.order') or f"POS-{pos_config.id}-{fields.Datetime.now().strftime('%Y%m%d%H%M%S')}"
-                        existing_order.write({'name': new_name, 'pos_reference': new_name})
-                        _logger.info("Fixed order name from '/' to '%s'", new_name)
+                    # Fix invalid name or "Furniture Shop" name if needed
+                    is_furniture = 'furniture' in existing_order.name.lower() if existing_order.name else False
+                    if not existing_order.name or existing_order.name == '/' or is_furniture:
+                        # Generate new Kiosk reference
+                        prefix = pos_config.name if pos_config.name and 'furniture' not in pos_config.name.lower() else 'Kiosk'
+                        seq_number = self._get_next_kiosk_sequence(pos_config)
+                        new_name = f"{prefix} {seq_number}"
+                        
+                        # Use SQL to force rename
+                        request.env.cr.execute("UPDATE pos_order SET name = %s, pos_reference = %s WHERE id = %s", (new_name, new_name, existing_order.id))
+                        request.env.cr.commit()
+                        existing_order.invalidate_recordset()
+                        _logger.info("Forced existing order rename from '%s' to '%s' (by token) via SQL", existing_order.name, new_name)
                     return existing_order
 
             # Create new order from the self-order data
@@ -154,10 +168,16 @@ class OmaPaymentController(http.Controller):
 
             # Generate a proper order reference
             order_ref = order_data.get('name')
-            if not order_ref or order_ref == '/':
-                 order_ref = request.env['ir.sequence'].sudo().next_by_code('pos.order') 
-                 if not order_ref:
-                      order_ref = f"POS-{pos_config.id}-{fields.Datetime.now().strftime('%Y%m%d%H%M%S')}"
+            # Force overwrite if it contains "Furniture Shop" or is default/empty
+            is_furniture = 'furniture' in (order_ref or '').lower()
+            if not order_ref or order_ref == '/' or is_furniture:
+                 # Use 'Kiosk' prefix as requested by user if POS config name implies it, or just force it for this module
+                 prefix = pos_config.name if pos_config.name and 'furniture' not in pos_config.name.lower() else 'Kiosk'
+                 
+                 # Let's generate a unique reference based on session
+                 seq_number = self._get_next_kiosk_sequence(pos_config)
+                 order_ref = f"{prefix} {seq_number}"
+                 _logger.info("Forced new order ref to '%s'", order_ref)
 
             # Prepare partner (assign default Guest if missing due to Kiosk mode)
             partner_id = order_data.get('partner_id')
@@ -471,7 +491,7 @@ class OmaPaymentController(http.Controller):
             # Check if fully paid using SQL result (with tolerance)
             if total_paid_sql >= (pos_order.amount_total - 0.05):
                 if pos_order.state == 'draft':
-                    # Directly update order state via SQL to bypass ORM caching issues
+                    # Directly update order state via SQL
                     request.env.cr.execute("""
                         UPDATE pos_order SET state = 'paid' WHERE id = %s AND state = 'draft'
                     """, (pos_order.id,))
@@ -483,18 +503,24 @@ class OmaPaymentController(http.Controller):
                     
                     _logger.info("Order %s state set to 'paid' via SQL", pos_order.name)
                     
-                    # Now try to complete the order properly (create accounting entries etc.)
+                    # Try to complete the order properly (create accounting entries, picking, etc.)
                     try:
-                        if pos_order.state == 'paid':
-                            # Call the session processing if needed
-                            pos_order._create_order_picking()
-                            pos_order._generate_pos_order_invoice()
+                        # Call process_saved_order to trigger KOT, notifications etc.
+                        # draft=False means process normally
+                        pos_order._process_saved_order(False)
+                        _logger.info("Processed saved order %s", pos_order.name)
+                        
+                        # Trigger KOT/KDS update if available
+                        if hasattr(pos_order, 'send_table_count_notification') and pos_order.table_id:
+                            pos_order.send_table_count_notification(pos_order.table_id)
+                            
                     except Exception as e:
-                        _logger.warning("Post-paid processing: %s", str(e))
-                        # Continue anyway - order is paid
+                        _logger.warning("Post-paid processing error: %s", str(e))
                 
                 _logger.info("Order %s successfully processed (state: %s)", pos_order.name, pos_order.state)
             else:
+                 # ... (rest of the code)
+
                 # Payment amount doesn't match - this shouldn't happen if we got here
                 diff = pos_order.amount_total - total_paid_sql
                 _logger.error("Payment mismatch: DB total paid=%s, order total=%s, diff=%s", 
@@ -592,3 +618,91 @@ class OmaPaymentController(http.Controller):
         ]
         
         return request.make_response(pdf_content, headers=pdfhttpheaders)
+
+    @http.route('/pos_payment_oma/print_invoice/<string:order_access_token>', type='json', auth='public', csrf=False)
+    def print_invoice_to_printer(self, order_access_token, **kwargs):
+        """Print the invoice as raw ESC/POS characters directly to the default thermal receipt printer (80mm)."""
+        _logger.info("Raw ESC/POS print requested for token: %s", order_access_token)
+        
+        pos_order = request.env['pos.order'].sudo().search([('access_token', '=', order_access_token)], limit=1)
+        
+        if not pos_order:
+            _logger.warning("Print failed: Order not found for token %s", order_access_token)
+            return {'success': False, 'error': 'Order not found'}
+
+        # Ensure partner exists for invoicing
+        if not pos_order.partner_id:
+            guest_partner = request.env['res.partner'].sudo().search([
+                ('name', 'ilike', 'Guest'), 
+                ('active', '=', True)
+            ], limit=1)
+            
+            if not guest_partner:
+                guest_partner = request.env['res.partner'].sudo().create({
+                    'name': 'Guest Customer',
+                    'active': True,
+                    'customer_rank': 1,
+                })
+            pos_order.partner_id = guest_partner.id
+            request.env.cr.commit()
+
+        # Generate invoice if missing
+        if not pos_order.account_move:
+            if pos_order.state in ['paid', 'done', 'invoiced']:
+                try:
+                    pos_order._generate_pos_order_invoice()
+                    request.env.cr.commit()
+                except Exception as e:
+                    _logger.error("Failed to generate invoice: %s", str(e))
+                    return {'success': False, 'error': f'Invoice generation failed: {str(e)}'}
+            else:
+                return {'success': False, 'error': 'Order not paid yet'}
+
+        # Flush all pending DB changes
+        request.env.cr.commit()
+
+        try:
+            # Build raw ESC/POS receipt
+            from odoo.addons.pos_payment_oma.services.escpos_receipt import build_receipt_from_pos_order
+            
+            raw_data = build_receipt_from_pos_order(pos_order)
+            _logger.info("Built ESC/POS receipt: %d bytes for order %s", len(raw_data), pos_order.name)
+            
+            # Get thermal printer name from POS config (default: POS-80)
+            printer_name = pos_order.config_id.thermal_printer_name or 'POS-80'
+            _logger.info("Targeting printer: %s", printer_name)
+            
+            # Write raw bytes to a temp file
+            with tempfile.NamedTemporaryFile(suffix='.bin', delete=False) as tmp_file:
+                tmp_file.write(raw_data)
+                tmp_path = tmp_file.name
+            
+            # Send raw data to the specified printer using lp
+            # -d <printer> targets a specific CUPS printer
+            # -o raw tells CUPS to send the data as-is without any filtering
+            result = subprocess.run(
+                ['lp', '-d', printer_name, '-o', 'raw', tmp_path],
+                capture_output=True,
+                text=True,
+                timeout=15
+            )
+            
+            # Clean up temp file
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+            
+            if result.returncode == 0:
+                _logger.info("ESC/POS receipt printed for order %s: %s", pos_order.name, result.stdout.strip())
+                return {'success': True, 'message': f'Receipt sent to printer: {result.stdout.strip()}'}
+            else:
+                _logger.error("Print failed for order %s: %s", pos_order.name, result.stderr.strip())
+                return {'success': False, 'error': f'Print command failed: {result.stderr.strip()}'}
+                
+        except subprocess.TimeoutExpired:
+            _logger.error("Print timeout for order %s", pos_order.name)
+            return {'success': False, 'error': 'Print command timed out'}
+        except Exception as e:
+            _logger.error("Print error for order %s: %s", pos_order.name, str(e))
+            return {'success': False, 'error': str(e)}
