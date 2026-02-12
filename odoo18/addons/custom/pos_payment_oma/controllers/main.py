@@ -71,8 +71,15 @@ class OmaPaymentController(http.Controller):
                 _logger.error("Order %s has zero or negative amount: %s", pos_order.name, amount)
                 return {'success': False, 'error': f'Order amount must be greater than 0 (got {amount})'}
 
-            # Call OMA ECR API for actual payment processing
-            ecr_result = self._call_oma_ecr_api(payment_method, amount, pos_order, retry_count)
+            # DEBUG: Automatic payment approval for testing
+            # ecr_result = self._call_oma_ecr_api(payment_method, amount, pos_order, retry_count)
+            ecr_result = {
+                'success': True,
+                'transaction_id': 'TEST-AUTO-APPROVE',
+                'card_type': 'TEST CARD',
+                'masked_pan': '**** **** **** 1234',
+                'message': 'Payment approved (Auto-approved for testing)'
+            }
 
             if ecr_result.get('success'):
                 # Create payment and complete order
