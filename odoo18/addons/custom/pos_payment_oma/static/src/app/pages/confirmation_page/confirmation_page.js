@@ -2,15 +2,17 @@ import { ConfirmationPage } from "@pos_self_order/app/pages/confirmation_page/co
 import { patch } from "@web/core/utils/patch";
 import { onMounted, useState } from "@odoo/owl";
 
+const LOCAL_PRINT_AGENT_URL = "http://localhost:9632";
+
 /**
- * Patch ConfirmationPage to auto-print the receipt using the same format
- * as the raw ESC/POS receipt (monospace, 80mm thermal paper layout).
+ * Patch ConfirmationPage to enable TRULY direct printing without a preview dialog.
  *
- * Loads the receipt from /pos_payment_oma/receipt_html/<token> in a hidden
- * iframe. That page has onload="window.print()" which triggers the browser
- * print dialog, printing to the local default printer.
+ * Flow:
+ * 1. Fetches raw ESC/POS bytes from the server.
+ * 2. Sends them to the Local Print Agent running on the Windows PC (localhost:9632).
+ * 3. The agent prints immediately to the default printer.
  *
- * Works for both local and remote server access.
+ * This bypasses all browser print dialogs.
  */
 patch(ConfirmationPage.prototype, {
     setup() {
@@ -23,73 +25,62 @@ patch(ConfirmationPage.prototype, {
 
         onMounted(() => {
             if (this.selfOrder.config.self_ordering_mode === "kiosk" && this.props.screenMode === "pay") {
-                setTimeout(() => this.autoPrintReceipt(), 2000);
+                // Wait for order data to be available
+                setTimeout(() => this.directPrintToLocalAgent(), 1500);
             }
         });
     },
 
     /**
-     * Print the receipt using a hidden iframe that loads the HTML receipt
-     * (same layout as raw ESC/POS) and triggers window.print().
+     * Fetch raw ESC/POS bytes and send to the local print agent for silent printing.
      */
-    async autoPrintReceipt() {
+    async directPrintToLocalAgent() {
         const token = this.props.orderAccessToken;
-        if (!token) {
-            console.warn("Auto-print: No order access token available");
-            return;
-        }
+        if (!token) return;
 
         try {
-            console.log("Auto-print: Loading receipt for printing...");
-            const receiptUrl = `/pos_payment_oma/receipt_html/${token}`;
+            console.log("DirectPrint: Fetching raw ESC/POS data...");
+            const response = await fetch(`/pos_payment_oma/receipt_raw/${token}`);
+            if (!response.ok) throw new Error("Failed to fetch receipt data from server");
 
-            // Remove any existing print iframe
-            const existing = document.getElementById('receipt-print-iframe');
-            if (existing) existing.remove();
+            const rawData = await response.arrayBuffer();
+            console.log(`DirectPrint: Sending ${rawData.byteLength} bytes to local agent...`);
 
-            // Create hidden iframe
-            const iframe = document.createElement('iframe');
-            iframe.id = 'receipt-print-iframe';
-            iframe.style.position = 'fixed';
-            iframe.style.top = '-10000px';
-            iframe.style.left = '-10000px';
-            iframe.style.width = '80mm';
-            iframe.style.height = '1px';
-            iframe.style.border = 'none';
-            iframe.style.visibility = 'hidden';
+            const printResponse = await fetch(`${LOCAL_PRINT_AGENT_URL}/print`, {
+                method: "POST",
+                headers: { "Content-Type": "application/octet-stream" },
+                body: rawData,
+            });
 
-            // The receipt_html page has onload="window.print()" built in,
-            // which auto-triggers the browser print dialog.
-            iframe.src = receiptUrl;
+            if (!printResponse.ok) {
+                const errorData = await printResponse.json();
+                throw new Error(errorData.error || "Local agent failed to print");
+            }
 
-            iframe.onload = () => {
-                console.log("Auto-print: Receipt loaded, print dialog should appear.");
+            const result = await printResponse.json();
+            if (result.success) {
+                console.log("DirectPrint: Success!", result.message);
                 this.state.printError = false;
-            };
-
-            iframe.onerror = () => {
-                console.warn("Auto-print: Failed to load receipt");
-                this.state.printError = true;
-                this.state.errorMessage = "Failed to load receipt.";
-            };
-
-            document.body.appendChild(iframe);
-
+            } else {
+                throw new Error(result.error || "Unknown print error");
+            }
         } catch (e) {
-            console.error("Auto-print: Error", e);
+            console.warn("DirectPrint: Failed", e.message);
             this.state.printError = true;
-            this.state.errorMessage = `Print error: ${e.message}`;
+            this.state.errorMessage = "Direct printing failed. Is the 'print_agent.py' running on this PC?";
+
+            // If the user wants a fallback to browser print, we could call it here.
+            // But the objective is "no browser print".
         }
     },
 
     /**
-     * Manual retry button handler.
+     * Manual retry - tries direct print again.
      */
     printInvoiceBrowser() {
-        const token = this.props.orderAccessToken;
-        if (token) {
-            window.open(`/pos_payment_oma/receipt_html/${token}`, '_blank');
-        }
+        this.state.printError = false;
+        this.state.errorMessage = "";
+        this.directPrintToLocalAgent();
     },
 
     /**
