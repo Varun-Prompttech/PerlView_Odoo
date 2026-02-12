@@ -71,8 +71,15 @@ class OmaPaymentController(http.Controller):
                 _logger.error("Order %s has zero or negative amount: %s", pos_order.name, amount)
                 return {'success': False, 'error': f'Order amount must be greater than 0 (got {amount})'}
 
-            # Call OMA ECR API with retry_count for unique client reference
-            ecr_result = self._call_oma_ecr_api(payment_method, amount, pos_order, retry_count)
+            # DEBUG: Automatic payment approval for testing
+            # ecr_result = self._call_oma_ecr_api(payment_method, amount, pos_order, retry_count)
+            ecr_result = {
+                'success': True,
+                'transaction_id': 'TEST-AUTO-APPROVE',
+                'card_type': 'TEST CARD',
+                'masked_pan': '**** **** **** 1234',
+                'message': 'Payment approved (Auto-approved for testing)'
+            }
 
             if ecr_result.get('success'):
                 # Create payment and complete order
@@ -680,8 +687,15 @@ class OmaPaymentController(http.Controller):
             # Send raw data to the specified printer using lp
             # -d <printer> targets a specific CUPS printer
             # -o raw tells CUPS to send the data as-is without any filtering
+            
+            # Check if 'lp' is available using 'which' to avoid [Errno 2]
+            lp_binary = '/usr/bin/lp'
+            if not os.path.exists(lp_binary):
+                # Fallback to just 'lp' and let subprocess find it in PATH
+                lp_binary = 'lp'
+
             result = subprocess.run(
-                ['lp', '-d', printer_name, '-o', 'raw', tmp_path],
+                [lp_binary, '-d', printer_name, '-o', 'raw', tmp_path],
                 capture_output=True,
                 text=True,
                 timeout=15
@@ -697,8 +711,18 @@ class OmaPaymentController(http.Controller):
                 _logger.info("ESC/POS receipt printed for order %s: %s", pos_order.name, result.stdout.strip())
                 return {'success': True, 'message': f'Receipt sent to printer: {result.stdout.strip()}'}
             else:
-                _logger.error("Print failed for order %s: %s", pos_order.name, result.stderr.strip())
-                return {'success': False, 'error': f'Print command failed: {result.stderr.strip()}'}
+                stderr = result.stderr.strip()
+                _logger.error("Print failed for order %s: %s", pos_order.name, stderr)
+                
+                error_msg = f"Print command failed: {stderr}"
+                if "not found" in stderr.lower() or "no such printer" in stderr.lower():
+                    error_msg = f"Printer '{printer_name}' not found on server. Ensure it's configured in CUPS."
+                
+                return {
+                    'success': False, 
+                    'error': error_msg,
+                    'is_printer_missing': True if "not found" in stderr.lower() or "no such printer" in stderr.lower() else False
+                }
                 
         except subprocess.TimeoutExpired:
             _logger.error("Print timeout for order %s", pos_order.name)

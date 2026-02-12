@@ -1,11 +1,15 @@
 import { ConfirmationPage } from "@pos_self_order/app/pages/confirmation_page/confirmation_page";
 import { patch } from "@web/core/utils/patch";
 import { rpc } from "@web/core/network/rpc";
-import { onMounted } from "@odoo/owl";
+import { onMounted, useState } from "@odoo/owl";
 
 patch(ConfirmationPage.prototype, {
     setup() {
         super.setup(...arguments);
+        this.state = useState({
+            printError: false,
+            errorMessage: "",
+        });
 
         // Auto-print thermal invoice when confirmation page loads (kiosk mode only)
         onMounted(() => {
@@ -33,11 +37,33 @@ patch(ConfirmationPage.prototype, {
 
             if (result.success) {
                 console.log("Auto-print: Invoice printed successfully -", result.message);
+                this.state.printError = false;
             } else {
-                console.error("Auto-print: Print failed -", result.error);
+                console.warn("Auto-print: Direct thermal print failed -", result.error);
+                this.state.printError = true;
+                this.state.errorMessage = result.error;
+
+                // AUTOMATIC FALLBACK: If direct print failed, open browser print window immediately
+                console.log("Auto-print: Triggering automatic browser fallback...");
+                this.printInvoiceBrowser();
             }
         } catch (e) {
             console.error("Auto-print: Error calling print endpoint", e);
+            this.state.printError = true;
+            this.state.errorMessage = "Connection error while printing.";
+            // Try fallback even on network error
+            this.printInvoiceBrowser();
+        }
+    },
+
+    /**
+     * Manual fallback to print the invoice via the browser.
+     * Opens the invoice PDF in a new window for the user to print manually.
+     */
+    printInvoiceBrowser() {
+        const token = this.props.orderAccessToken;
+        if (token) {
+            window.open(`/pos_payment_oma/download_invoice/${token}`, '_blank');
         }
     },
 
