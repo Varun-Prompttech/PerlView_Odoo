@@ -570,6 +570,242 @@ class OmaPaymentController(http.Controller):
             _logger.warning("Failed to save transaction log: %s", str(e))
             # Don't raise - logging failure shouldn't break the payment flow
 
+    @http.route('/pos_payment_oma/receipt_html/<string:order_access_token>', type='http', auth='public', website=False, csrf=False)
+    def receipt_html(self, order_access_token, **kwargs):
+        """Generate a printable HTML receipt page styled for 80mm thermal paper.
+        Same layout as ESC/POS receipt but rendered as HTML for browser printing."""
+        from markupsafe import Markup
+        from datetime import datetime
+
+        pos_order = request.env['pos.order'].sudo().search([('access_token', '=', order_access_token)], limit=1)
+        if not pos_order:
+            return request.make_response("Order not found", headers=[('Content-Type', 'text/plain')])
+
+        company = pos_order.company_id
+        invoice = pos_order.account_move
+
+        # Currency
+        currency = pos_order.currency_id or company.currency_id
+        cur_symbol = currency.symbol if currency else ''
+        cur_position = currency.position if currency else 'after'
+
+        def fmt(amount):
+            formatted = f"{amount:,.2f}"
+            if cur_symbol:
+                if cur_position == 'before':
+                    return f"{cur_symbol} {formatted}"
+                else:
+                    return f"{formatted} {cur_symbol}"
+            return formatted
+
+        def esc(text):
+            """Escape HTML entities."""
+            return str(text).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+        lines_html = []
+
+        # Header - Company Info
+        lines_html.append('<div class="center">')
+        lines_html.append(f'<div class="bold big">{esc(company.name or "Store")}</div>')
+        if company.street:
+            lines_html.append(f'<div>{esc(company.street)}</div>')
+        if company.street2:
+            lines_html.append(f'<div>{esc(company.street2)}</div>')
+        city_parts = []
+        if company.city:
+            city_parts.append(company.city)
+        if company.state_id:
+            city_parts.append(company.state_id.name)
+        if company.zip:
+            city_parts.append(company.zip)
+        if city_parts:
+            lines_html.append(f'<div>{esc(", ".join(city_parts))}</div>')
+        if company.country_id:
+            lines_html.append(f'<div>{esc(company.country_id.name)}</div>')
+        if company.phone:
+            lines_html.append(f'<div>Tel: {esc(company.phone)}</div>')
+        if company.email:
+            lines_html.append(f'<div>{esc(company.email)}</div>')
+        if company.website:
+            lines_html.append(f'<div>{esc(company.website)}</div>')
+        if company.vat:
+            lines_html.append(f'<div>TRN: {esc(company.vat)}</div>')
+        lines_html.append('<br/>')
+        lines_html.append('</div>')
+
+        # Order Reference
+        lines_html.append('<div class="center">')
+        tracking = getattr(pos_order, 'tracking_number', None)
+        if tracking:
+            lines_html.append(f'<div class="bold biggest">{esc(tracking)}</div>')
+        order_name = pos_order.name or ''
+        if order_name:
+            if tracking:
+                lines_html.append(f'<div class="bold">Order: {esc(order_name)}</div>')
+            else:
+                lines_html.append(f'<div class="bold biggest">Order: {esc(order_name)}</div>')
+        pos_ref = pos_order.pos_reference or ''
+        if pos_ref and pos_ref != order_name and not tracking:
+            lines_html.append(f'<div class="bold biggest">{esc(pos_ref)}</div>')
+
+        # Invoice number
+        if invoice and invoice.name:
+            lines_html.append(f'<div>Invoice: {esc(invoice.name)}</div>')
+
+        # Date
+        order_date = pos_order.date_order
+        if order_date:
+            lines_html.append(f'<div>{order_date.strftime("%d/%m/%Y %H:%M")}</div>')
+        else:
+            lines_html.append(f'<div>{datetime.now().strftime("%d/%m/%Y %H:%M")}</div>')
+        lines_html.append('</div>')
+
+        # Cashier / Table / Customer
+        if pos_order.user_id:
+            lines_html.append(f'<div class="center">Served by: {esc(pos_order.user_id.name)}</div>')
+        if pos_order.table_id:
+            table_info = f"Table: {pos_order.table_id.name}"
+            if pos_order.customer_count:
+                table_info += f"  Guests: {pos_order.customer_count}"
+            lines_html.append(f'<div class="center">{esc(table_info)}</div>')
+        if pos_order.partner_id and pos_order.partner_id.name and 'guest' not in pos_order.partner_id.name.lower():
+            lines_html.append(f'<div class="center">Customer: {esc(pos_order.partner_id.name)}</div>')
+
+        lines_html.append('<div class="sep">------------------------------------------------</div>')
+
+        # Order Lines Header
+        lines_html.append('<div class="row bold"><span class="col-item">ITEM</span><span class="col-qty">QTY</span><span class="col-amt">AMOUNT</span></div>')
+        lines_html.append('<div class="sep">------------------------------------------------</div>')
+
+        # Order Lines
+        if invoice and invoice.invoice_line_ids:
+            for line in invoice.invoice_line_ids.filtered(lambda l: l.display_type in ('product', False, None)):
+                product_name = line.product_id.display_name or line.name or 'Item'
+                qty = line.quantity
+                unit_price = line.price_unit
+                total = line.price_total
+                lines_html.append(f'<div class="row"><span class="col-item">{esc(product_name[:26])}</span><span class="col-qty">{qty:g}</span><span class="col-amt">{esc(fmt(total))}</span></div>')
+                if qty != 1:
+                    lines_html.append(f'<div class="detail">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{qty:g} x {esc(fmt(unit_price))}</div>')
+                if line.discount and line.discount > 0:
+                    lines_html.append(f'<div class="detail">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Disc: {line.discount:g}%</div>')
+        else:
+            for line in pos_order.lines:
+                product_name = line.product_id.display_name or 'Item'
+                qty = line.qty
+                unit_price = line.price_unit
+                total = line.price_subtotal_incl
+                lines_html.append(f'<div class="row"><span class="col-item">{esc(product_name[:26])}</span><span class="col-qty">{qty:g}</span><span class="col-amt">{esc(fmt(total))}</span></div>')
+                if qty != 1:
+                    lines_html.append(f'<div class="detail">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{qty:g} x {esc(fmt(unit_price))}</div>')
+                if line.discount and line.discount > 0:
+                    lines_html.append(f'<div class="detail">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Disc: {line.discount:g}%</div>')
+
+        lines_html.append('<div class="sep">------------------------------------------------</div>')
+
+        # Totals
+        if invoice:
+            subtotal = invoice.amount_untaxed
+            tax = invoice.amount_tax
+            total = invoice.amount_total
+        else:
+            subtotal = sum(l.price_subtotal for l in pos_order.lines)
+            tax = pos_order.amount_tax
+            total = pos_order.amount_total
+
+        lines_html.append(f'<div class="row"><span class="col-left">Subtotal</span><span class="col-right">{esc(fmt(subtotal))}</span></div>')
+        if tax and tax > 0:
+            lines_html.append(f'<div class="row"><span class="col-left">Tax</span><span class="col-right">{esc(fmt(tax))}</span></div>')
+            if invoice:
+                for tax_line in invoice.line_ids.filtered(lambda l: l.tax_line_id):
+                    tax_name = tax_line.tax_line_id.name or 'Tax'
+                    lines_html.append(f'<div class="row"><span class="col-left">&nbsp;&nbsp;{esc(tax_name)}</span><span class="col-right">{esc(fmt(abs(tax_line.balance)))}</span></div>')
+
+        lines_html.append('<div class="dsep">================================================</div>')
+        lines_html.append(f'<div class="row bold big"><span class="col-left">TOTAL</span><span class="col-right">{esc(fmt(total))}</span></div>')
+        lines_html.append('<div class="dsep">================================================</div>')
+
+        # Payment Details
+        if pos_order.payment_ids:
+            lines_html.append('<br/>')
+            for payment in pos_order.payment_ids:
+                method_name = payment.payment_method_id.name or 'Payment'
+                lines_html.append(f'<div class="row"><span class="col-left">{esc(method_name)}</span><span class="col-right">{esc(fmt(payment.amount))}</span></div>')
+                if hasattr(payment, 'card_no') and payment.card_no:
+                    lines_html.append(f'<div class="detail">&nbsp;&nbsp;Card: {esc(payment.card_no)}</div>')
+                if hasattr(payment, 'card_type') and payment.card_type:
+                    lines_html.append(f'<div class="detail">&nbsp;&nbsp;Type: {esc(payment.card_type)}</div>')
+            if pos_order.amount_return and pos_order.amount_return > 0:
+                lines_html.append(f'<div class="row"><span class="col-left">Change</span><span class="col-right">{esc(fmt(pos_order.amount_return))}</span></div>')
+
+        # Footer
+        lines_html.append('<div class="sep">------------------------------------------------</div>')
+        lines_html.append('<div class="center">Thank you for your purchase!</div>')
+        lines_html.append('<br/>')
+        ref = pos_order.pos_reference or pos_order.name
+        lines_html.append(f'<div class="center">{esc(ref)}</div>')
+        lines_html.append('<div class="center">Powered by Odoo</div>')
+
+        body_content = '\n'.join(lines_html)
+
+        html = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Receipt</title>
+<style>
+@page {{
+    size: 80mm auto;
+    margin: 0;
+}}
+* {{
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}}
+body {{
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+    line-height: 1.3;
+    width: 80mm;
+    padding: 2mm;
+    color: #000;
+}}
+.center {{ text-align: center; }}
+.bold {{ font-weight: bold; }}
+.big {{ font-size: 16px; }}
+.biggest {{ font-size: 20px; }}
+.sep, .dsep {{
+    text-align: center;
+    letter-spacing: -1px;
+    overflow: hidden;
+    white-space: nowrap;
+}}
+.row {{
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}}
+.col-item {{ flex: 0 0 54%; text-align: left; overflow: hidden; }}
+.col-qty {{ flex: 0 0 16%; text-align: left; }}
+.col-amt {{ flex: 0 0 30%; text-align: right; }}
+.col-left {{ text-align: left; }}
+.col-right {{ text-align: right; }}
+.detail {{ padding-left: 0; }}
+@media print {{
+    body {{ width: 80mm; }}
+}}
+</style>
+</head>
+<body onload="window.print();">
+{body_content}
+</body>
+</html>"""
+
+        return request.make_response(html, headers=[
+            ('Content-Type', 'text/html; charset=utf-8'),
+        ])
+
     @http.route('/pos_payment_oma/download_invoice/<string:order_access_token>', type='http', auth='public', website=True)
     def download_invoice(self, order_access_token, **kwargs):
         """Serve the invoice PDF for the given order access token."""
