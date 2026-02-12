@@ -12,14 +12,17 @@ echo "Connecting to remote server $HOST..."
 sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no $USER@$HOST "bash -s" << EOF
     cd $DIR
     
-    # Identify existing process
-    PID=\$(ss -tulnp | grep ":$PORT " | awk '{print \$7}' | cut -d',' -f2 | cut -d'=' -f2)
+    # Kill all processes related to this Odoo instance/directory
+    echo "Cleaning up all existing Odoo processes for $DIR..."
+    pkill -9 -f "$DIR" || echo "No processes found."
     
-    if [ -n "\$PID" ]; then
-        echo "Stopping existing process on port $PORT (PID: \$PID)..."
-        kill -9 \$PID
-        sleep 1
+    # Also specifically free the port if anything remains
+    PORT_PID=\$(ss -tulnp | grep ":$PORT " | awk '{print \$7}' | cut -d',' -f2 | cut -d'=' -f2)
+    if [ -n "\$PORT_PID" ]; then
+        echo "Forcing kill on port $PORT (PID: \$PORT_PID)..."
+        kill -9 \$PORT_PID
     fi
+    sleep 2
 
     echo "Starting Odoo on remote port $PORT..."
     # Using python3 from venv if exists, else system python
