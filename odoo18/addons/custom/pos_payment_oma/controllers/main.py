@@ -806,7 +806,8 @@ class OmaPaymentController(http.Controller):
 }}
 body {{
     font-family: 'Courier New', Courier, monospace;
-    font-size: 12px;
+    font-size: 13px;
+    font-weight: bold;
     line-height: 1.3;
     width: 80mm;
     padding: 2mm;
