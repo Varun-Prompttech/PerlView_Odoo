@@ -622,6 +622,30 @@ class OmaPaymentController(http.Controller):
         if not pos_order:
             return request.make_response("Order not found", headers=[('Content-Type', 'text/plain')])
 
+        # Ensure partner exists for invoicing
+        if not pos_order.partner_id:
+            guest_partner = request.env['res.partner'].sudo().search([
+                ('name', 'ilike', 'Guest'),
+                ('active', '=', True)
+            ], limit=1)
+            if not guest_partner:
+                guest_partner = request.env['res.partner'].sudo().create({
+                    'name': 'Guest Customer',
+                    'active': True,
+                    'customer_rank': 1,
+                })
+            pos_order.partner_id = guest_partner.id
+            request.env.cr.commit()
+
+        # Generate invoice if missing
+        if not pos_order.account_move:
+            if pos_order.state in ['paid', 'done', 'invoiced']:
+                try:
+                    pos_order._generate_pos_order_invoice()
+                    request.env.cr.commit()
+                except Exception as e:
+                    _logger.error("Failed to generate invoice for HTML receipt: %s", str(e))
+
         company = pos_order.company_id
         invoice = pos_order.account_move
 
