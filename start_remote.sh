@@ -24,14 +24,14 @@ sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no $USER@$HOST "bash -s" << EOF
     fi
     sleep 2
 
-    echo "Starting Odoo on remote port $PORT..."
+    echo "Starting Odoo on remote port \$PORT..."
     # Using python3 from venv if exists, else system python
     PYTHON_CMD="python3"
     if [ -f ".venv/bin/python3" ]; then
         PYTHON_CMD=".venv/bin/python3"
     fi
 
-    nohup \$PYTHON_CMD odoo18/odoo/odoo-bin -c odoo18/config/odoo.conf --db_host=localhost --db_password=prompttech --http-port=$PORT > odoo_remote.log 2>&1 &
+    nohup \$PYTHON_CMD odoo18/odoo/odoo-bin -c odoo18/config/odoo.conf --db_host=localhost --db_password=prompttech --http-port=\$PORT > odoo_remote.log 2>&1 &
     
     NEW_PID=\$!
     echo "SUCCESS: Odoo started on remote with PID \$NEW_PID"
