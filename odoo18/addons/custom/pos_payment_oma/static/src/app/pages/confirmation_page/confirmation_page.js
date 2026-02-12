@@ -1,54 +1,101 @@
 import { ConfirmationPage } from "@pos_self_order/app/pages/confirmation_page/confirmation_page";
 import { patch } from "@web/core/utils/patch";
-import { OrderReceipt } from "@point_of_sale/app/screens/receipt_screen/receipt/order_receipt";
+import { onMounted, useState } from "@odoo/owl";
 
 /**
- * Patch ConfirmationPage to enable browser-based printing (window.print)
- * when no IoT Box / hardware printer device is configured.
+ * Patch ConfirmationPage to auto-print the receipt using the same format
+ * as the raw ESC/POS receipt (monospace, 80mm thermal paper layout).
  *
- * The native Odoo POS printHtml() silently skips printing if no device is set.
- * This override enables { webPrintFallback: true } so that window.print()
- * is triggered, which prints to the browser's local default printer.
- * This works for both local and remote server access.
+ * Loads the receipt from /pos_payment_oma/receipt_html/<token> in a hidden
+ * iframe. That page has onload="window.print()" which triggers the browser
+ * print dialog, printing to the local default printer.
+ *
+ * Works for both local and remote server access.
  */
 patch(ConfirmationPage.prototype, {
-    async printOrderAfterTime() {
-        try {
-            if (this.confirmedOrder && Object.keys(this.confirmedOrder).length > 0) {
-                const el = await this.printer.renderer.toHtml(OrderReceipt, {
-                    data: this.selfOrder.orderExportForPrinting(this.confirmedOrder),
-                    formatCurrency: this.selfOrder.formatMonetary.bind(this.selfOrder),
-                });
+    setup() {
+        super.setup(...arguments);
+        this.state = useState({
+            ...this.state,
+            printError: false,
+            errorMessage: "",
+        });
 
-                // Try hardware printer first, fall back to window.print()
-                const result = await this.printer.printHtml(el, { webPrintFallback: true });
-
-                if (!result && !this.printer.device) {
-                    // If printHtml returned false and no device, use printWeb directly
-                    this.printer.printWeb(el);
-                }
-
-                if (!this.selfOrder.has_paper) {
-                    this.updateHasPaper(true);
-                }
-            } else {
-                setTimeout(() => this.printOrderAfterTime(), 500);
+        onMounted(() => {
+            if (this.selfOrder.config.self_ordering_mode === "kiosk" && this.props.screenMode === "pay") {
+                setTimeout(() => this.autoPrintReceipt(), 2000);
             }
-        } catch (e) {
-            if (e.errorCode === "EPTR_REC_EMPTY") {
-                this.dialog.add(
-                    (await import("@pos_self_order/app/components/out_of_paper_popup/out_of_paper_popup")).OutOfPaperPopup,
-                    {
-                        title: `No more paper in the printer, please remember your order number: '${this.confirmedOrder.trackingNumber}'.`,
-                        close: () => {
-                            this.router.navigate("default");
-                        },
-                    }
-                );
-                this.updateHasPaper(false);
-            } else {
-                console.error("Print error:", e);
-            }
+        });
+    },
+
+    /**
+     * Print the receipt using a hidden iframe that loads the HTML receipt
+     * (same layout as raw ESC/POS) and triggers window.print().
+     */
+    async autoPrintReceipt() {
+        const token = this.props.orderAccessToken;
+        if (!token) {
+            console.warn("Auto-print: No order access token available");
+            return;
         }
+
+        try {
+            console.log("Auto-print: Loading receipt for printing...");
+            const receiptUrl = `/pos_payment_oma/receipt_html/${token}`;
+
+            // Remove any existing print iframe
+            const existing = document.getElementById('receipt-print-iframe');
+            if (existing) existing.remove();
+
+            // Create hidden iframe
+            const iframe = document.createElement('iframe');
+            iframe.id = 'receipt-print-iframe';
+            iframe.style.position = 'fixed';
+            iframe.style.top = '-10000px';
+            iframe.style.left = '-10000px';
+            iframe.style.width = '80mm';
+            iframe.style.height = '1px';
+            iframe.style.border = 'none';
+            iframe.style.visibility = 'hidden';
+
+            // The receipt_html page has onload="window.print()" built in,
+            // which auto-triggers the browser print dialog.
+            iframe.src = receiptUrl;
+
+            iframe.onload = () => {
+                console.log("Auto-print: Receipt loaded, print dialog should appear.");
+                this.state.printError = false;
+            };
+
+            iframe.onerror = () => {
+                console.warn("Auto-print: Failed to load receipt");
+                this.state.printError = true;
+                this.state.errorMessage = "Failed to load receipt.";
+            };
+
+            document.body.appendChild(iframe);
+
+        } catch (e) {
+            console.error("Auto-print: Error", e);
+            this.state.printError = true;
+            this.state.errorMessage = `Print error: ${e.message}`;
+        }
+    },
+
+    /**
+     * Manual retry button handler.
+     */
+    printInvoiceBrowser() {
+        const token = this.props.orderAccessToken;
+        if (token) {
+            window.open(`/pos_payment_oma/receipt_html/${token}`, '_blank');
+        }
+    },
+
+    /**
+     * Override native printOrderAfterTime to prevent double printing.
+     */
+    async printOrderAfterTime() {
+        return;
     },
 });

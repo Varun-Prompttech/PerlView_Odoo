@@ -7,6 +7,16 @@
                 <span class="fs-1 fw-bold text-primary" t-esc="confirmedOrder.pos_reference || confirmedOrder.name" />
                 <span class="fs-4 text-muted mt-2" t-if="confirmedOrder.tracking_number">Token: <t t-esc="confirmedOrder.tracking_number"/></span>
             </div>
+
+            <div t-if="state.printError" class="alert alert-warning d-flex flex-column align-items-center mt-3 mx-4">
+                <p class="mb-2 text-center">
+                    <i class="fa fa-exclamation-triangle me-2"/>
+                    <t t-esc="state.errorMessage"/>
+                </p>
+                <button class="btn btn-primary btn-lg w-100" t-on-click="printInvoiceBrowser">
+                    <i class="fa fa-print me-2"/>Print Receipt
+                </button>
+            </div>
         </xpath>
     </t>
 </templates>
