@@ -771,9 +771,9 @@ class OmaPaymentController(http.Controller):
             tax = pos_order.amount_tax
             total = pos_order.amount_total
 
-        lines_html.append(f'<div class="row"><span class="col-left">Subtotal</span><span class="col-right">{esc(fmt(subtotal))}</span></div>')
+        lines_html.append(f'<div class="row"><span class="col-left">Total Before VAT</span><span class="col-right">{esc(fmt(subtotal))}</span></div>')
         if tax and tax > 0:
-            lines_html.append(f'<div class="row"><span class="col-left">Tax</span><span class="col-right">{esc(fmt(tax))}</span></div>')
+            lines_html.append(f'<div class="row"><span class="col-left">VAT</span><span class="col-right">{esc(fmt(tax))}</span></div>')
             if invoice:
                 for tax_line in invoice.line_ids.filtered(lambda l: l.tax_line_id):
                     tax_name = tax_line.tax_line_id.name or 'Tax'
