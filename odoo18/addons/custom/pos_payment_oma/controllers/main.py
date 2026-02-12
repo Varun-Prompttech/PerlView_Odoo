@@ -570,6 +570,47 @@ class OmaPaymentController(http.Controller):
             _logger.warning("Failed to save transaction log: %s", str(e))
             # Don't raise - logging failure shouldn't break the payment flow
 
+    @http.route('/pos_payment_oma/receipt_raw/<string:order_access_token>', type='http', auth='public', website=False, csrf=False)
+    def receipt_raw(self, order_access_token, **kwargs):
+        """Return raw ESC/POS bytes for the given order. Used by the local print agent."""
+        pos_order = request.env['pos.order'].sudo().search([('access_token', '=', order_access_token)], limit=1)
+        if not pos_order:
+            return request.make_response("Order not found", headers=[('Content-Type', 'text/plain')], status=404)
+
+        # Ensure partner exists for invoicing
+        if not pos_order.partner_id:
+            guest_partner = request.env['res.partner'].sudo().search([
+                ('name', 'ilike', 'Guest'),
+                ('active', '=', True)
+            ], limit=1)
+            if not guest_partner:
+                guest_partner = request.env['res.partner'].sudo().create({
+                    'name': 'Guest Customer',
+                    'active': True,
+                    'customer_rank': 1,
+                })
+            pos_order.partner_id = guest_partner.id
+            request.env.cr.commit()
+
+        # Generate invoice if missing
+        if not pos_order.account_move:
+            if pos_order.state in ['paid', 'done', 'invoiced']:
+                try:
+                    pos_order._generate_pos_order_invoice()
+                    request.env.cr.commit()
+                except Exception as e:
+                    _logger.error("Failed to generate invoice for raw receipt: %s", str(e))
+
+        from odoo.addons.pos_payment_oma.services.escpos_receipt import build_receipt_from_pos_order
+        raw_data = build_receipt_from_pos_order(pos_order)
+
+        return request.make_response(raw_data, headers=[
+            ('Content-Type', 'application/octet-stream'),
+            ('Content-Length', str(len(raw_data))),
+            ('Access-Control-Allow-Origin', '*'),
+            ('Access-Control-Allow-Methods', 'GET'),
+        ])
+
     @http.route('/pos_payment_oma/receipt_html/<string:order_access_token>', type='http', auth='public', website=False, csrf=False)
     def receipt_html(self, order_access_token, **kwargs):
         """Generate a printable HTML receipt page styled for 80mm thermal paper.

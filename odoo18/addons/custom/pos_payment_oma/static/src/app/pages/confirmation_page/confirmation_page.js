@@ -2,6 +2,8 @@ import { ConfirmationPage } from "@pos_self_order/app/pages/confirmation_page/co
 import { patch } from "@web/core/utils/patch";
 import { onMounted, useState } from "@odoo/owl";
 
+const LOCAL_PRINT_AGENT_URL = "http://localhost:9632";
+
 patch(ConfirmationPage.prototype, {
     setup() {
         super.setup(...arguments);
@@ -10,19 +12,21 @@ patch(ConfirmationPage.prototype, {
             errorMessage: "",
         });
 
-        // Auto-print thermal invoice when confirmation page loads (kiosk mode only)
+        // Auto-print when confirmation page loads (kiosk mode only)
         onMounted(() => {
             if (this.selfOrder.config.self_ordering_mode === "kiosk" && this.props.screenMode === "pay") {
-                // Small delay to ensure order/invoice data is fully committed on the server
                 setTimeout(() => this.autoPrintThermalInvoice(), 1500);
             }
         });
     },
 
     /**
-     * Automatically print the receipt via a hidden iframe.
-     * Loads the HTML receipt endpoint which triggers window.print() on load,
-     * allowing the browser to print to the locally attached default printer.
+     * Auto-print flow:
+     * 1. Fetch raw ESC/POS bytes from the Odoo server
+     * 2. POST them to the local print agent (localhost:9632/print)
+     * 3. The local agent sends them to the thermal printer via `lp`
+     *
+     * If the local agent is not running, falls back to server-side `lp` (works on localhost only).
      */
     async autoPrintThermalInvoice() {
         const token = this.props.orderAccessToken;
@@ -32,67 +36,76 @@ patch(ConfirmationPage.prototype, {
         }
 
         try {
-            console.log("Auto-print: Loading receipt in hidden iframe for local printing...");
-            const receiptUrl = `/pos_payment_oma/receipt_html/${token}`;
+            console.log("Auto-print: Fetching raw ESC/POS data from server...");
 
-            // Remove any existing print iframe
-            const existingIframe = document.getElementById('receipt-print-iframe');
-            if (existingIframe) {
-                existingIframe.remove();
+            // 1. Fetch raw ESC/POS bytes from Odoo server
+            const rawResponse = await fetch(`/pos_payment_oma/receipt_raw/${token}`);
+            if (!rawResponse.ok) {
+                throw new Error(`Failed to fetch receipt data: ${rawResponse.status}`);
             }
+            const rawData = await rawResponse.arrayBuffer();
+            console.log(`Auto-print: Got ${rawData.byteLength} bytes of ESC/POS data`);
 
-            // Create hidden iframe
-            const iframe = document.createElement('iframe');
-            iframe.id = 'receipt-print-iframe';
-            iframe.style.position = 'fixed';
-            iframe.style.top = '-10000px';
-            iframe.style.left = '-10000px';
-            iframe.style.width = '80mm';
-            iframe.style.height = '0';
-            iframe.style.border = 'none';
-            iframe.style.visibility = 'hidden';
+            // 2. Try sending to local print agent
+            try {
+                console.log("Auto-print: Sending to local print agent...");
+                const printResponse = await fetch(`${LOCAL_PRINT_AGENT_URL}/print`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/octet-stream" },
+                    body: rawData,
+                });
 
-            // The receipt_html endpoint has onload="window.print()" which will
-            // trigger the browser print dialog automatically when the iframe loads.
-            // This prints to the user's local default printer.
-            iframe.src = receiptUrl;
+                const result = await printResponse.json();
+                if (result.success) {
+                    console.log("Auto-print: Success via local print agent -", result.message);
+                    this.state.printError = false;
+                    return;
+                } else {
+                    console.warn("Auto-print: Local agent print failed -", result.error);
+                    this.state.printError = true;
+                    this.state.errorMessage = result.error;
+                }
+            } catch (agentError) {
+                console.warn("Auto-print: Local print agent not available, trying server-side...", agentError.message);
 
-            iframe.onload = () => {
-                console.log("Auto-print: Receipt iframe loaded, print dialog should appear.");
-                this.state.printError = false;
-            };
-
-            iframe.onerror = () => {
-                console.warn("Auto-print: Failed to load receipt iframe");
-                this.state.printError = true;
-                this.state.errorMessage = "Failed to load receipt for printing.";
-            };
-
-            document.body.appendChild(iframe);
-
+                // 3. Fallback: try server-side lp (only works if printer is on the server)
+                try {
+                    const { rpc } = await import("@web/core/network/rpc");
+                    const serverResult = await rpc(`/pos_payment_oma/print_invoice/${token}`, {});
+                    if (serverResult.success) {
+                        console.log("Auto-print: Success via server-side lp -", serverResult.message);
+                        this.state.printError = false;
+                        return;
+                    } else {
+                        this.state.printError = true;
+                        this.state.errorMessage = "Printing failed. Please start the local print agent.";
+                    }
+                } catch (serverError) {
+                    console.warn("Auto-print: Server-side print also failed", serverError);
+                    this.state.printError = true;
+                    this.state.errorMessage = "Printing failed. Please start the local print agent (python3 print_agent.py).";
+                }
+            }
         } catch (e) {
-            console.error("Auto-print: Error setting up print iframe", e);
+            console.error("Auto-print: Error", e);
             this.state.printError = true;
-            this.state.errorMessage = "Error while printing receipt.";
+            this.state.errorMessage = `Print error: ${e.message}`;
         }
     },
 
     /**
-     * Manual fallback - open receipt in a new window for the user to print.
+     * Manual retry - try printing again.
      */
     printInvoiceBrowser() {
-        const token = this.props.orderAccessToken;
-        if (token) {
-            window.open(`/pos_payment_oma/receipt_html/${token}`, '_blank');
-        }
+        this.state.printError = false;
+        this.state.errorMessage = "";
+        this.autoPrintThermalInvoice();
     },
 
     /**
      * Override native printOrderAfterTime to prevent double printing.
-     * The native method prints a POS receipt; we replace it with our auto-print.
      */
     async printOrderAfterTime() {
-        // No-op: printing handled by autoPrintThermalInvoice()
         return;
     },
 });
