@@ -4,22 +4,26 @@
 HOST="147.93.30.185"
 USER="root"
 PASS="PTAdmin@151298"
-DIR="/opt/odoo/PerlView_Test"
-PORT=8070
+REMOTE_DIR="/opt/odoo/PerlView_Test"
+REMOTE_PORT=8070
 
 echo "Connecting to remote server $HOST..."
 
 sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no $USER@$HOST "bash -s" << EOF
-    cd $DIR
+    # Constants defined inside the remote shell
+    DIR="$REMOTE_DIR"
+    PORT=$REMOTE_PORT
+    
+    cd "\$DIR"
     
     # Kill all processes related to this Odoo instance/directory
-    echo "Cleaning up all existing Odoo processes for $DIR..."
-    pkill -9 -f "$DIR" || echo "No processes found."
+    echo "Cleaning up all existing Odoo processes for \$DIR..."
+    pkill -9 -f "\$DIR" || echo "No processes found."
     
     # Also specifically free the port if anything remains
-    PORT_PID=\$(ss -tulnp | grep ":$PORT " | awk '{print \$7}' | cut -d',' -f2 | cut -d'=' -f2)
+    PORT_PID=\$(ss -tulnp | grep ":\$PORT " | awk '{print \$7}' | cut -d',' -f2 | cut -d'=' -f2)
     if [ -n "\$PORT_PID" ]; then
-        echo "Forcing kill on port $PORT (PID: \$PORT_PID)..."
+        echo "Forcing kill on port \$PORT (PID: \$PORT_PID)..."
         kill -9 \$PORT_PID
     fi
     sleep 2
@@ -35,5 +39,5 @@ sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no $USER@$HOST "bash -s" << EOF
     
     NEW_PID=\$!
     echo "SUCCESS: Odoo started on remote with PID \$NEW_PID"
-    echo "Remote Log: $DIR/odoo_remote.log"
+    echo "Remote Log: \$DIR/odoo_remote.log"
 EOF
