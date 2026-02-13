@@ -8,3 +8,10 @@ class HrEmployee(models.Model):
 
     sh_is_allow_z_report = fields.Boolean(
         string="Allow to Generate Z-Report ?")
+
+
+class HrEmployeePublic(models.Model):
+    _inherit = 'hr.employee.public'
+
+    sh_is_allow_z_report = fields.Boolean(
+        related='employee_id.sh_is_allow_z_report', readonly=True)

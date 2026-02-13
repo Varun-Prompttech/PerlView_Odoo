@@ -7,22 +7,29 @@ class PosSession(models.Model):
     def _validate_session(self, balancing_account=False, amount_to_balance=0, bank_payment_method_diffs=None):
         res = super()._validate_session(balancing_account=balancing_account, amount_to_balance=amount_to_balance,
                                         bank_payment_method_diffs=bank_payment_method_diffs)
-        distribution_list = {}
         account_analytic_distribution = self.env['account.analytic.distribution.model'].search(
-            [('pos_config_id', '=', self.config_id.id)])
-        keys_as_int = [int(key) for key in account_analytic_distribution.analytic_distribution.keys()]
-        analytic_account = self.env['account.analytic.account'].search([('id', 'in', keys_as_int)])
-        distribution_list[analytic_account.id] = 100
+            [('pos_config_id', '=', self.config_id.id)], limit=1)
+        if account_analytic_distribution and account_analytic_distribution.analytic_distribution:
+            keys_as_int = [int(key) for key in account_analytic_distribution.analytic_distribution.keys()]
+            analytic_account = self.env['account.analytic.account'].search([('id', 'in', keys_as_int)])
+        else:
+            analytic_account = self.env['account.analytic.account']
+
+        if not analytic_account:
+            return res
+
+        distribution_list = {str(analytic_account.id): 100}
+
         # Adding Analytic Account in Journal Entry
         if self.move_id:
             self.move_id.analytic_account_id = [(6, 0, analytic_account.ids)]
-            # Adding Analytic Account Cash Payment
+        # Adding Analytic Account Cash Payment
         if self.statement_line_ids:
             move_id = self.statement_line_ids.mapped('move_id')
             move_id.analytic_account_id = [(6, 0, analytic_account.ids)]
             for line in move_id.line_ids:
                 line.analytic_distribution = distribution_list
-            # Adding Analytic Account Bank Payment
+        # Adding Analytic Account Bank Payment
         if self.bank_payment_ids:
             move_id = self.bank_payment_ids.mapped('move_id')
             move_id.analytic_account_id = [(6, 0, analytic_account.ids)]
@@ -45,9 +52,10 @@ class PosOrder(models.Model):
         # Adding Analytic Account while creating invoice in order for complimentary sales
         account_analytic_distribution = self.env['account.analytic.distribution.model'].search(
             [('pos_config_id', '=', self.session_id.config_id.id)])
-        keys_as_int = [int(key) for key in account_analytic_distribution.analytic_distribution.keys()]
-        analytic_account = self.env['account.analytic.account'].search([('id', 'in', keys_as_int)]).ids
-        vals['analytic_account_id'] = [(6, 0, analytic_account)]
+        if account_analytic_distribution and account_analytic_distribution.analytic_distribution:
+            keys_as_int = [int(key) for key in account_analytic_distribution.analytic_distribution.keys()]
+            analytic_account = self.env['account.analytic.account'].search([('id', 'in', keys_as_int)]).ids
+            vals['analytic_account_id'] = [(6, 0, analytic_account)]
         return vals
 
     @api.model
@@ -58,9 +66,10 @@ class PosOrder(models.Model):
         if pos_order_line.order_id.config_id:
             account_analytic_distribution = self.env['account.analytic.distribution.model'].search(
                 [('pos_config_id', '=', pos_order_line.order_id.config_id.id)])
-            keys_as_int = [int(key) for key in account_analytic_distribution.analytic_distribution.keys()]
-            analytic_account = self.env['account.analytic.account'].search([('id', 'in', keys_as_int)])
-            distribution_list[analytic_account.id] = 100
+            if account_analytic_distribution and account_analytic_distribution.analytic_distribution:
+                keys_as_int = [int(key) for key in account_analytic_distribution.analytic_distribution.keys()]
+                analytic_account = self.env['account.analytic.account'].search([('id', 'in', keys_as_int)])
+                distribution_list[analytic_account.id] = 100
 
         return {
             'product_id': line_values['product_id'].id,
@@ -78,9 +87,12 @@ class PosOrder(models.Model):
         distribution_list = {}
         account_analytic_distribution = self.env['account.analytic.distribution.model'].search(
             [('pos_config_id', '=', self.session_id.config_id.id)])
-        keys_as_int = [int(key) for key in account_analytic_distribution.analytic_distribution.keys()]
-        analytic_account = self.env['account.analytic.account'].search([('id', 'in', keys_as_int)])
-        distribution_list[analytic_account.id] = 100
+        if account_analytic_distribution and account_analytic_distribution.analytic_distribution:
+            keys_as_int = [int(key) for key in account_analytic_distribution.analytic_distribution.keys()]
+            analytic_account = self.env['account.analytic.account'].search([('id', 'in', keys_as_int)])
+            distribution_list[analytic_account.id] = 100
+        else:
+            analytic_account = self.env['account.analytic.account']
         # Adding Analytic Account in Account Move while generation of picking
         for picking in self.picking_ids:
 

@@ -1,3 +1,4 @@
+/** @odoo-module **/
 import { ConfirmationPage } from "@pos_self_order/app/pages/confirmation_page/confirmation_page";
 import { patch } from "@web/core/utils/patch";
 import { onMounted, useState } from "@odoo/owl";
