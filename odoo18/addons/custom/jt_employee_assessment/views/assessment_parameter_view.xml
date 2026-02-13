@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <!-- Assessment Paramater Type Form View -->
+        <record id="assessment_parameter_view_form" model="ir.ui.view">
+            <field name="name">assessment.parameter.view.form</field>
+            <field name="model">assessment.parameter</field>
+            <field name="arch" type="xml">
+                <form>
+                    <sheet>
+                        <group>
+                            <group>
+                                <field name="name" required="1"/>
+                            </group>
+                        </group>
+                        <notebook>
+                            <page string="Assessment Parameter Lines">
+                                <field name="assessment_parameter_line_ids" widget="section_and_note_one2many">
+                                    <list string="Assessment Lines" editable="bottom">
+                                        <control>
+                                            <create name="add_line_control"
+                                                    string="Add a line"/>
+                                            <create name="add_section_control" string="Add a section"
+                                                    context="{'default_display_type': 'line_section'}"/>
+                                            <create name="add_note_control" string="Add a note"
+                                                    context="{'default_display_type': 'line_note'}"/>
+                                        </control>
+                                        <field name="parameter_id" required="not display_type"/>
+                                        <field name="name"/>
+                                        <field name="display_type" column_invisible="True"/>
+                                        <field name="is_true" required="not display_type"/>
+                                        <field name="is_false" required="not display_type"/>
+                                    </list>
+                                </field>
+                            </page>
+                        </notebook>
+                    </sheet>
+                    <!-- Chatter -->
+                    <chatter reload_on_attachment="True"/>
+                </form>
+            </field>
+        </record>
+
+        <!-- Assessment Paramater Type List View -->
+        <record id="assessment_parameter_view_list" model="ir.ui.view">
+            <field name="name">assessment.parameter.view.list</field>
+            <field name="model">assessment.parameter</field>
+            <field name="arch" type="xml">
+                <list>
+                    <field name="name" string='Rating Label'/>
+                </list>
+            </field>
+        </record>
+
+        <!-- Assessment Paramater Action -->
+        <record id="action_emp_ass_param" model="ir.actions.act_window">
+            <field name="name">Employee Assessment Parameters</field>
+            <field name="res_model">assessment.parameter</field>
+            <field name="view_mode">list,form</field>
+        </record>
+
+
+    </data>
+</odoo>

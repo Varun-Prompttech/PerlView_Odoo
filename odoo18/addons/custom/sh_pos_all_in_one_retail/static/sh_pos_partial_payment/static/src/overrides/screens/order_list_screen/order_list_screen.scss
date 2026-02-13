@@ -1,0 +1,22 @@
+body.pos {
+    div.pos-content {
+        .shorderlist-screen {
+            .top-content {
+                .sh_full_content_service_management.sh_order_list_full_content {
+                    .sh_order_list {
+                        .sh_order_list_contents {
+                            .sh_order_line {
+                                td.sh_orderlist_customer_td {
+                                    width: unset;
+                                }
+                            }
+                        }
+                        thead th.sh_orderlist_cust_th {
+                            width: unset;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

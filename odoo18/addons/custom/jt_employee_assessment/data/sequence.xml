@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <data>
+        <record id="sequence_employee_assessment" model="ir.sequence">
+            <field name="name">Employee Assessment</field>
+            <field name="code">employee.assessment</field>
+            <field name="prefix">EMP-</field>
+            <field name="padding">4</field>
+        </record>
+    </data>
+</odoo>

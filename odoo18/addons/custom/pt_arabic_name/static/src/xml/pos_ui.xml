@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+    <!-- Extended OrderSummary Component Template -->
+    <t t-name="bg_pos_item_counter.OrderWidget"
+       t-inherit="point_of_sale.OrderWidget" t-inherit-mode="extension" owl="1">
+        <xpath expr="//div[hasclass('order-summary')]" position="inside">
+            <!-- Display the item count -->
+            <div class="line">
+                <div class="subentry fs-6 text-muted">
+                    Total Items:
+                    <span class="value">
+                        <t t-esc="ItemCount"/>
+                    </span>
+                </div>
+                <!-- Display the total quantity -->
+                <div class="subentry fs-6 text-muted">
+                    Total Quantity:
+                    <span class="value">
+                        <t t-esc="TotalQuantity"/>
+                    </span>
+                </div>
+            </div>
+        </xpath>
+    </t>
+
+    <t t-name="pt_pos_item_name.Orderline"
+       t-inherit="point_of_sale.Orderline" t-inherit-mode="extension" owl="1">
+        <xpath expr="//li[hasclass('orderline')]/div[hasclass('d-flex')]/div[('product-name')]" position="after">
+            <div class="text-wrap">
+                <t t-if="props.line.arabic_name" t-esc="props.line.arabic_name"/>
+            </div>
+        </xpath>
+    </t>
+</templates>

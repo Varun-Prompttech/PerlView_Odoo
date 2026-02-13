@@ -1,0 +1,224 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <!-- HR Assessment Search View -->
+        <record id="hr_assessments_view_search" model="ir.ui.view">
+            <field name="name">hr.assessments.view.search</field>
+            <field name="model">hr.assessments</field>
+            <field name="arch" type="xml">
+                <search>
+                    <field name="name"/>
+                    <field name="employee_id"/>
+                    <field name="year"/>
+                    <field name="month"/>
+                    <field name="ass_type"/>
+
+                    <separator string="Assessment Types"/>
+                    <filter name="monthly" string="Assessment Type: Monthly" domain="[('ass_type', '=', 'monthly')]"/>
+
+                    <separator string="Months"/>
+                    <filter name="month_1" string="Month: January" domain="[('month', '=', '01')]"/>
+                    <filter name="month_2" string="Month: February" domain="[('month', '=', '02')]"/>
+                    <filter name="month_3" string="Month: March" domain="[('month', '=', '03')]"/>
+                    <filter name="month_4" string="Month: April" domain="[('month', '=', '04')]"/>
+                    <filter name="month_5" string="Month: May" domain="[('month', '=', '05')]"/>
+                    <filter name="month_6" string="Month: June" domain="[('month', '=', '06')]"/>
+                    <filter name="month_7" string="Month: July" domain="[('month', '=', '07')]"/>
+                    <filter name="month_8" string="Month: August" domain="[('month', '=', '08')]"/>
+                    <filter name="month_9" string="Month: September" domain="[('month', '=', '09')]"/>
+                    <filter name="month_10" string="Month: October" domain="[('month', '=', '10')]"/>
+                    <filter name="month_11" string="Month: November" domain="[('month', '=', '11')]"/>
+                    <filter name="month_12" string="Month: December" domain="[('month', '=', '12')]"/>
+
+                    <group expand="0" string="Group By">
+                        <filter name="group_by_ass_type" string='Assessment Type' context="{'group_by':'ass_type'}"/>
+                        <filter name="group_by_employee_id" string='Employee' context="{'group_by':'employee_id'}"/>
+                        <filter name="group_by_month" string='Month' context="{'group_by':'month'}"/>
+                        <filter name="group_by_year" string='Year' context="{'group_by':'year'}"/>
+                        <filter name="group_by_store_id" string='Store' context="{'group_by':'store_id'}"/>
+                    </group>
+
+                </search>
+            </field>
+        </record>
+
+        <!-- HR Assessment Form View -->
+        <record id="hr_assessments_view_form" model="ir.ui.view">
+            <field name="name">hr.assessments.view.form</field>
+            <field name="model">hr.assessments</field>
+            <field name="arch" type="xml">
+                <form>
+                    <header>
+                        <button name="complete_assessment" string="Complete Assessment" type="object"
+                                invisible="state in ('draft','completed')" class="btn-primary"/>
+                        <button name="assign_assessment" string="Assign Assessment" type="object"
+                                invisible="state in ('assigned','completed')" class="btn-primary"/>
+                        <field name="state" widget="statusbar"
+                               statusbar_visible="draft,assigned,completed"/>
+                    </header>
+                    <sheet>
+                        <group>
+                            <group>
+                                <div class="pr-0">
+                                    <h1 class="d-flex flex-row justify-content-between">
+                                        <field name="seq_number" default_focus="1"/>
+                                    </h1>
+                                </div>
+                                <field name="name" string='Name' required="1" invisible="1"/>
+                                <field name="complete_date" required="1" readonly="1"
+                                       invisible="state in ['draft','assigned']"/>
+                                <field name="employee_id" string='Employee' required="1"
+                                       readonly="state in ['assigned','completed']"/>
+                                <field name="store_id" string='Store Name'
+                                       readonly="state in ['assigned','completed']"
+                                       options="{'no_open': True, 'no_create': True}"/>
+                                <field name="template_id" required="1" readonly="state in ['assigned','completed']"
+                                       options="{'no_open': True, 'no_create': True}"/>
+                                <field name="create_uid" readonly="1"/>
+                                <field name="ass_type" string='Assessment Type' required="1"
+                                       readonly="state in ['assigned','completed']"/>
+                            </group>
+                        </group>
+                        <group>
+                            <group>
+                                <label for="month" string="Assessment For" readonly="state in ['assigned','completed']"
+                                       invisible="ass_type ==  'daily'"/>
+                                <div class="o_address_format">
+                                    <field name='month' style="width: 48%;" placeholder="Month" class="o_address_city"
+                                           invisible="ass_type in  ['daily']"
+                                           readonly="state in ['assigned','completed']"/>
+                                    <field name='year' style="width: 48%;" placeholder="Year" class="o_address_city"
+                                           readonly="state in ['assigned','completed']"
+                                           invisible="ass_type ==  'daily'"/>
+                                </div>
+                                <field name="current_date" invisible="ass_type ==  'monthly'" force_save="1"/>
+                                <field name="total_points" invisible="state in ['assigned','draft']"/>
+                                <field name="total_average_points"/>
+                            </group>
+                        </group>
+
+                        <notebook>
+                            <page string="Assessment Lines">
+                                <field name="assessment_line_ids" readonly="state in ['completed']" create="false"
+                                       delete="false">
+                                    <list editable="bottom" create="false" delete="false">
+                                        <field name="name" readonly="1" force_save="1"/>
+                                        <field name="note" force_save="1"/>
+                                        <field name="parameter_line_id" column_invisible="1"/>
+                                        <field name="is_assessment_true"/>
+                                        <field name="is_assessment_false"/>
+                                        <field name="is_assessment_na"/>
+                                        <field name="attachment_ids" force_save="1"
+                                               widget="many2many_binary" class="oe_inline"/>
+                                    </list>
+                                </field>
+                            </page>
+                            <page string="Geo Location" invisible="state != 'completed'">
+                                <group>
+                                    <group>
+                                        <label for="date_localization" string="Geo Location"/>
+                                        <div>
+                                            <span>Lat :
+                                                <field name="partner_latitude" nolabel="1" class="oe_inline"
+                                                       forece_save="1"
+                                                       readonly="1"/>
+                                            </span>
+                                            <br/>
+                                            <span>Long:
+                                                <field name="partner_longitude" nolabel="1" class="oe_inline"
+                                                       forece_save="1"
+                                                       readonly="1"/>
+                                            </span>
+                                            <br/>
+                                            <span invisible="not date_localization">Updated on:
+                                                <field name="date_localization" nolabel="1" readonly="1"
+                                                       class="oe_inline"/>
+                                                <br/>
+                                            </span>
+                                            <div name="geo_localize_button">
+                                                <button invisible="state in ('draft','assigned','completed')"
+                                                        icon="fa-gear" string="Compute Location"
+                                                        title="Compute Localization"
+                                                        name="update_partner_location" type="object"
+                                                        class="btn btn-link p-0"/>
+                                                <button invisible="state in ('draft','assigned','completed')"
+                                                        icon="fa-refresh" string="Refresh" title="Refresh Localization"
+                                                        name="update_partner_location" type="object"
+                                                        class="btn btn-link p-0"/>
+                                            </div>
+                                        </div>
+                                    </group>
+                                </group>
+                            </page>
+                        </notebook>
+                    </sheet>
+                    <!-- Chatter -->
+                    <chatter reload_on_attachment="True"/>
+                </form>
+            </field>
+        </record>
+
+        <!-- HR Assessment list View -->
+        <record id="hr_assessments_view_list" model="ir.ui.view">
+            <field name="name">hr.assessments.view.list</field>
+            <field name="model">hr.assessments</field>
+            <field name="arch" type="xml">
+                <list class="hr_assessments">
+                    <field name="seq_number"/>
+                    <field name="create_date"/>
+                    <field name="employee_id" string='Employee'/>
+                    <field name="total_average_points" />
+<!--                    <field name="total_points"/>-->
+                </list>
+            </field>
+        </record>
+
+        <!-- HR Assessment Action -->
+        <record id="action_hr_assessments" model="ir.actions.act_window">
+            <field name="name">Employee Assessments</field>
+            <field name="res_model">hr.assessments</field>
+            <field name="view_mode">list,form</field>
+            <field name="context">{'search_default_group_by_employee_id':1}</field>
+        </record>
+
+        <record id="action_hr_assessments_storewise" model="ir.actions.act_window">
+            <field name="name">Employee Assessments For StoreWise</field>
+            <field name="res_model">hr.assessments</field>
+            <field name="view_mode">list,form</field>
+            <field name="context">{'search_default_group_by_store_id':1}</field>
+        </record>
+
+        <menuitem
+                id="menu_hr_assessments"
+                name="Employee Assessments"
+                sequence="5" web_icon="jt_employee_assessment,static/description/icon.png">
+
+            <menuitem
+                    id="menu_hr_sub_assessments"
+                    action="action_hr_assessments"
+                    name="Employee Assessments"
+                    sequence="1"/>
+
+            <menuitem id="menu_main_assessment_configuration" name="Assessment Configuration"
+                      sequence="2">
+                <menuitem
+                        id="menu_emp_ass_param"
+                        action="action_emp_ass_param"
+                        name="Employee Assessment Parameters" sequence="1"
+                />
+                <menuitem
+                        id="menu_assessment_store"
+                        action="action_assessment_store"
+                        name="Assessment Store" sequence="2"
+                />
+                <menuitem
+                        id="menu_hr_sub_assessments_store"
+                        action="action_hr_assessments_storewise"
+                        name="Employee Assessments Store Wise"
+                        sequence="3"/>
+
+            </menuitem>
+
+        </menuitem>
+    </data>
+</odoo>

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+    <t t-name="pt_pos_loyalty_customization.RemoveCashAmount"
+       t-inherit="point_of_sale.ClosePosPopup"
+       t-inherit-mode="extension">
+
+        <!-- 1. Remove the order amount span -->
+        <xpath expr="//div[@class='total-orders fw-bolder align-middle my-1']/span[@class='amount']" position="replace">
+            <!-- Removed -->
+        </xpath>
+
+        <!-- 2. Remove the entire cash_control div -->
+        <xpath expr="//div[@t-if='pos.config.cash_control' and contains(@class, 'w-100 mb-3')]" position="replace">
+            <!-- Removed -->
+        </xpath>
+
+        <!-- 3. Remove the entire other cash_control div -->
+        <xpath expr="//div[@t-if='pos.config.cash_control and pos.config.module_pos_hr' and contains(@class, 'w-100 mb-3')]" position="replace">
+            <!-- Removed -->
+        </xpath>
+
+        <!-- 4. Remove the autoFillCashCount button -->
+        <xpath expr="//button[contains(@t-on-click, 'autoFillCashCount')]" position="replace">
+            <!-- Removed -->
+        </xpath>
+
+    </t>
+
+</templates>

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <record model="ir.ui.view" id="inherited_pos_order_form">
+            <field name="name">inherited.pos.order.form</field>
+            <field name="model">pos.order</field>
+            <field name="inherit_id" ref="point_of_sale.view_pos_pos_form"/>
+            <field name="priority" eval="8"/>
+            <field name="arch" type="xml">
+                <xpath expr="//field[@name='payment_method_id']" position="after">
+                    <field name="user_check_pos" invisible="1"/>
+                </xpath>
+                <xpath expr="//field[@name='payment_method_id']" position="attributes">
+                    <attribute name="readonly">user_check_pos == False</attribute>
+                </xpath>
+                <xpath expr="//field[@name='amount']" position="attributes">
+                    <attribute name="readonly">user_check_pos == False</attribute>
+                </xpath>
+            </field>
+        </record>
+
+        <record model="ir.ui.view" id="inherited_res_users_pos_page">
+            <field name="name">inherited.res.users.pos.page</field>
+            <field name="model">res.users</field>
+            <field name="inherit_id" ref="pos_restrict.view_users_form"/>
+            <field name="arch" type="xml">
+                <xpath expr="//page[.//field[@name='allowed_pos']]/group" position="inside">
+                    <field name="max_discount_percentage"/>
+                </xpath>
+            </field>
+        </record>
+    </data>
+</odoo>

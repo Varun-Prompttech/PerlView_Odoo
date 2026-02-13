@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <data>
+         <template id="external_layout_no_border" inherit_from="web.external_layout_standard">
+             <xpath expr="//body" position="attributes">
+                 <attribute name="class" add="o_page_no_border"/>
+             </xpath>
+         </template>
+     </data>
+</odoo>

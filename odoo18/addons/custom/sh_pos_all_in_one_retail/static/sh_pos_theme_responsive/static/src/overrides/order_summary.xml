@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+    <t t-extend="ShOrderWidget" t-inherit="point_of_sale.OrderWidget" t-inherit-mode="extension">
+        <xpath expr="//div[hasclass('order-summary')]" position="replace">
+            <div t-if="taxTotals" class="order-summary d-flex justify-content-between gap-1 px-3 py-2 border-top fw-bolder lh-sm">
+                <div class="sh_right_order_summary sh_order_summary_line">
+                    <div class="entry total">
+                        <div class="line global_discount_line" t-if="pos.config.sh_allow_order_line_discount or pos.config.sh_allow_global_discount">
+                            <span class="total fw-normal text-muted">Global Discount</span>
+                            <span class="sh_value discount_amount fw-normal text-muted">
+                                <t t-if="pos_discount and props and !props.global_discount">
+                                    <t t-esc="pos_discount()" />
+                                </t>
+                                <t t-else="">
+                                    <t t-esc="props.global_discount" />
+                                </t>
+                            </span>
+                        </div>
+                        <div class="items_counter text-end">
+                            <t t-if="this.env.services.pos.config.enable_pos_item_counter">
+                                <span class="sh_total_item_tag fw-normal text-muted">
+                                    Total Items : <span class="value"><t t-esc="props.lines.length"/></span>
+                                </span>
+                            </t>
+                            <t t-if="this.env.services.pos.config.enable_pos_item_counter and  this.env.services.pos.config.enable_pos_qty_counter">
+                                <span class="sh_vertical_line"> | </span>
+                            </t>
+                            <t t-if=" this.env.services.pos.config.enable_pos_qty_counter">
+                                <span class="sh_total_qty_tag fw-normal text-muted">
+                                    Total Qty : <span class="value"><t t-esc="this.env.services.pos.get_order().get_total_qty()"/></span>
+                                </span>
+                            </t>
+                        </div>
+                        <div class="sh_cart_weight_main text-start" t-if='this.env.services.pos.config.enable_weight'>
+                            <span class="sh_cart_total_weight_lbl fw-normal text-muted">Total Weight :</span>
+                            <span class="sh_cart_total_weight_val"><t t-esc='this.env.services.pos.get_order().get_total_weight()' /></span>
+                        </div>
+                        <div class="sh_cart_vol_main text-start" t-if='this.env.services.pos.config.enable_volume'>
+                            <span class="sh_cart_total_volume_lbl fw-normal text-muted">Total Volume :</span>
+                            <span class="sh_cart_total_volume_val"><t t-esc='this.env.services.pos.get_order().get_total_volume()' /></span>
+                        </div>
+                    </div>
+
+
+
+                </div>
+                <div class="sh_left_order_summary sh_order_summary_left_line">
+                    <div t-if="taxTotals.has_tax_groups" class="tax-info subentry d-flex justify-content-between w-100 fs-6 text-muted">
+                        <span class="sh_tax_label">
+                            Taxes
+                        </span>
+                        <div id="order-widget-taxes">
+                            <span t-esc="formatMonetary(taxTotals.order_sign * taxTotals.tax_amount_currency, {currencyId: taxTotals.currency_id})"
+                                    class="tax"/>
+                        </div>
+                    </div>
+                    <t t-if="env.services.pos.config.sh_enable_rounding">
+                        <div  class="fs-6 text-muted subentry sh_pos_rounding_text">
+                            <span class="sh_rounding_label fw-normal text-muted">
+                                Rounding: 
+                            </span>
+                            <span t-esc="env.services.pos.get_order().get_rounding_amount()" class="tax fw-normal text-muted"/>
+                        </div>
+                    </t>
+                    <div class="d-flex justify-content-between w-100 fs-2">
+                        <span class="sh_total_label">
+                            Total
+                        </span>
+                        <span t-esc="formatMonetary(taxTotals.order_sign * taxTotals.order_total, {currencyId: taxTotals.currency_id})"
+                                class="total"/>
+                    </div>
+                    
+                    
+                    
+                </div>
+            </div>
+            <!-- <div class="items_counter text-end">
+                <t t-if="this.env.services.pos.config.enable_pos_item_counter">
+                   
+                        Total Items : <span class="value"><t t-esc="props.lines.length"/></span>
+                    
+                </t>
+                <t t-if="this.env.services.pos.config.enable_pos_item_counter and  this.env.services.pos.config.enable_pos_qty_counter">
+                    <b> | </b>
+                </t>
+                <t t-if=" this.env.services.pos.config.enable_pos_qty_counter">
+                    
+                        Total Qty : <span class="value"><t t-esc="this.env.services.pos.get_order().get_total_qty()"/></span>
+                    
+                </t>
+            </div> -->
+        </xpath>
+    </t>
+
+</templates>

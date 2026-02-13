@@ -1,0 +1,53 @@
+<odoo>
+    <record id="mail_template_for_employee_assessment" model="mail.template">
+        <field name="name">Employee Assessment Notification</field>
+        <field name="model_id" ref="jt_employee_assessment.model_hr_assessments"/>
+        <field name="subject">Your Assessment: {{ object.name }}</field>
+        <field name="email_from">{{ user.email_formatted }}</field>
+        <field name="body_html" type="html">
+            <p>Dear <t t-out="object.employee_id.name or ''"/>,</p>
+
+            <p>
+                Your assessment <b><t t-out="object.name or ''"/></b> has been updated.
+            </p>
+
+            <p>
+                Total Points Scored:
+                <b><t t-out="object.total_points or 0"/></b>
+            </p>
+
+            <p>Assessment Details:</p>
+
+            <table border="1" cellspacing="0" cellpadding="5" style="border-collapse: collapse; width:100%;">
+                <thead style="background-color:#f2f2f2; text-align:center;">
+                    <tr>
+                        <th>Parameter Name</th>
+                        <th>Yes</th>
+                        <th>No</th>
+                        <th>NA</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr t-foreach="object.assessment_line_ids" t-as="line">
+                        <td><t t-out="line.name or ''"/></td>
+                        <td style="text-align:center;">
+                            <t t-if="line.is_assessment_true">✔</t>
+                            <t t-else="">✘</t>
+                        </td>
+                        <td style="text-align:center;">
+                            <t t-if="line.is_assessment_false">✔</t>
+                            <t t-else="">✘</t>
+                        </td>
+                         <td style="text-align:center;">
+                            <t t-if="line.is_assessment_na">✔</t>
+                            <t t-else="">✘</t>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <p>Please login to the system to review your assessment details.</p>
+            <p>Thank you.</p>
+        </field>
+    </record>
+</odoo>

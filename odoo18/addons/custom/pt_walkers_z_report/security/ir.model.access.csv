@@ -1,0 +1,3 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_walkers_z_report,access.walkers.z.report,model_walkers_z_report,,1,1,1,1
+access_fast_moving_product_wizard,access.fast.moving.product.wizard,model_fast_moving_product_wizard,,1,1,1,1

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="gt_pdf_print_preview.DocumentViewer.Content">
+        <div class="o_viewer_content o_AttachmentViewer flex-column align-items-center d-flex w-100 h-100 o_Dialog_component">
+            <t t-set="model" t-value="widget.modelName" />
+            <div class="o_AttachmentViewer_header d-flex w-100 bg-black-75 text-400">
+                <div class="o_AttachmentViewer_headerItem o_AttachmentViewer_icon d-flex align-items-center ms-4 me-2">
+                    <i class="fa fa-file-text mr8" role="img" aria-label="PDF file" title="PDF file" />
+                </div>
+                <div class="o_AttachmentViewer_headerItem o_AttachmentViewer_name d-flex align-items-center mx-2">
+                    <span class="o_AttachmentViewer_nameText text-truncate" t-esc="widget.activeAttachment.name" />
+                </div>
+                <div class="flex-grow-1" />
+                <div class="o_close_btn o_AttachmentViewer_headerItem o_AttachmentViewer_headerItemButton o_AttachmentViewer_headerItemButtonClose d-flex align-items-center mb-0 px-3 h4 text-reset cursor-pointer" title="Close">
+                    <i class="fa fa-fw fa-close" role="img" aria-label="Close" />
+                </div>
+            </div>
+            <div class="o_viewer_zoomer o_AttachmentViewer_main position-absolute top-0 bottom-0 start-0 end-0 align-items-center justify-content-center d-flex" style="padding-bottom: 45px;margin-top: 45px;z-index: 1;padding-top: 0;">
+                <iframe class="o_AttachmentViewer_view o_AttachmentViewer_viewIframe o_AttachmentViewer_viewPdf w-75 h-100 border-0" t-attf-src="/web/static/lib/pdfjs/web/viewer.html?file={{widget.url}}" />
+            </div>
+        </div>
+    </t>
+
+    <t t-name="gt_pdf_print_preview.DocumentViewer">
+        <div class="modal o_modal_fullscreen" tabindex="-1" data-keyboard="false" role="dialog">
+            <t class="o_document_viewer_content_call" t-call="gt_pdf_print_preview.DocumentViewer.Content" />
+        </div>
+    </t>
+</templates>

@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <t t-name="sh_pos_manager_validation.ShValidationTypePopup">
+        <Dialog size="'md'" title="props.title">
+            <div class="d-flex justify-content-center align-items-center justify-content-between m-5">
+                <t t-set="type" t-value="pos.config.sh_validation_type"/>
+                <t t-if="['barcode' , 'password_barcode' , 'all' ,'pin_barcode'].includes(type)">
+                    <div style="padding: 20px;">
+                        <img t-on-click="open_barcodePopup"  src="/sh_pos_all_in_one_retail/static/sh_pos_manager_validation/static/src/img/barcode.png" alt="Barcode" style="cursor: pointer; height:80px; width:120px;" />
+                    </div>
+                </t>
+
+                <t t-if="['password_barcode' , 'all' , 'pin_barcode'].includes(type)">
+                    <div>
+                        Or
+                    </div>
+                </t>
+
+                <t t-if="['password' , 'password_barcode' , 'all' ,'pin_password'].includes(type)">
+                    <div style="padding: 20px;">
+                        <button class="btn btn-lg" t-on-click="open_passwordPopup" style="border: 1px solid black; height:80px; width:120px">Password</button>
+                    </div>
+                </t>
+
+                <t t-if="['all' , 'pin_password'].includes(type)">
+                    <div>
+                        Or
+                    </div>
+                </t>
+
+                <t t-if="['pin' , 'pin_barcode' , 'all' ,'pin_password'].includes(type)">
+                    <div style="padding: 20px;">
+                        <button class="btn btn-lg button" t-on-click="open_pin_numberPopup" style="border: 1px solid black; height:80px; width:120px">Pin</button>
+                    </div>
+                </t>
+
+            </div>
+
+            <t t-set-slot="footer">
+                <button class="button dont-show-again highlight btn btn-lg btn-primary w-auto" t-on-click="cancel">Cancel</button>
+            </t>
+
+        </Dialog>
+
+        <!-- <div class="popup sh_validation_method_popup">
+            <div class="modal-header">
+                <h4 class="modal-title title">
+                    Select Validation Method
+                </h4>
+            </div>
+            <main class="modal-body">
+                <p class="body pin_password" t-attf-class="{{(env.services.pos.config.sh_validation_type == 'password_barcode' ? 'password_barcode' : '')+(env.services.pos.config.sh_validation_type == 'pin_barcode' ? 'pin_barcode' : '')+(env.services.pos.config.sh_validation_type == 'pin_password' ? 'pin_password' : '') }} ">
+                    <t t-if="env.services.pos.config.sh_validation_type == 'all' or env.services.pos.config.sh_validation_type == 'password_barcode' or env.services.pos.config.sh_validation_type == 'pin_barcode' or env.services.pos.config.sh_validation_type == 'barcode'">
+                        <div class="sh_barcode_div">
+                            <img class="login-barcode-img" src="/sh_pos_manager_validation/static/src/img/barcode.png" t-on-click="open_barcodePopup"/>
+                        </div>
+                        
+                    </t>
+                    <div class="sh_or_div" t-if="env.services.pos.config.sh_validation_type =='all' or env.services.pos.config.sh_validation_type == 'pin_barcode' or env.services.pos.config.sh_validation_type == 'password_barcode'">
+                        <span class="sh_or">or</span>
+                    </div>
+                    <t t-if="env.services.pos.config.sh_validation_type == 'all' or env.services.pos.config.sh_validation_type == 'password_barcode' or env.services.pos.config.sh_validation_type == 'password' or env.services.pos.config.sh_validation_type == 'pin_password' ">
+                        <div class="sh_password_div">
+                            <button class="btn" t-on-click="open_passwordPopup">Password</button>
+                        </div>
+                   </t>
+                    <div class="sh_or_div" t-if="env.services.pos.config.sh_validation_type == 'all' or env.services.pos.config.sh_validation_type == 'pin_password'">
+                        <span class="sh_or">or</span>
+                    </div>
+                    <t t-if="env.services.pos.config.sh_validation_type == 'all' or env.services.pos.config.sh_validation_type == 'pin' or env.services.pos.config.sh_validation_type == 'pin_barcode' or env.services.pos.config.sh_validation_type == 'pin_password' ">
+                        <div class="sh_pin_div" t-on-click="numberpopup"> 
+                            <button class="btn">Pin</button>
+                        </div>
+                    </t>
+                </p>
+            </main>
+            <footer class="footer footer-flex modal-footer">
+                <div class="button dont-show-again highlight btn btn-lg btn-primary w-auto" t-on-click="Cancel">
+                    Cancel
+                </div>
+            </footer>
+        </div> -->
+    </t>
+
+</templates>

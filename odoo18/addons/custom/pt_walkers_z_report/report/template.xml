@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <template id="report_z_walkers">
+        <t t-call="web.external_layout">
+<!--            <t t-raw="0">-->
+                <style>
+                    .invisible-border {
+                    border: 1px solid transparent !important;
+                    }
+                    .w-100{
+                    width:100%
+                    }
+                </style>
+<!--            </t>-->
+
+            <main>
+                <div class="page invisible-border" >
+                    <t t-set="sales_summary" t-value="lines['sales_summary']"/>
+                    <t t-set="payment_details" t-value="lines['payment_details']"/>
+                    <t t-set="category_details" t-value="lines['category_details']"/>
+                    <table class="invisible-border w-100">
+                                                <tr>
+                            <th colspan="3">Branch:
+                                <t t-esc="branches"/>
+                            </th>
+                        </tr>
+
+                        <tr>
+                            <th>Date From:
+                                <t t-esc="date_start"/>
+                            </th>
+                            <th></th>
+                            <th>To:
+                                <t t-esc="date_stop"/>
+                            </th>
+                        </tr>
+                        <tr t-if="sales_summary">
+                            <th colspan="3">
+                                <u>Sales Summary</u>
+                            </th>
+                        </tr>
+                        <tr>
+                            <th>Sales Type</th>
+                            <th>Bill Count</th>
+                            <th>Total</th>
+                        </tr>
+                        <tr>
+                            <t t-foreach="sales_summary" t-as="value">
+                                <th>
+                                    <t t-esc="value['sales_type']"/>
+                                </th>
+                                <th>
+                                    <t t-esc="value['bill_count']"/>
+                                </th>
+                                <th>
+                                    <t t-esc="value['amount']"/>
+                                </th>
+                            </t>
+                        </tr>
+                        <tr t-if="payment_details">
+                            <th colspan="3">
+                                <u>Payment Details</u>
+                            </th>
+                        </tr>
+                        <t t-foreach="payment_details" t-as="details">
+                            <tr>
+                                <th>
+                                    <t t-esc="details['payment_method']"/>
+                                </th>
+                                <th></th>
+                                <th>
+                                    <t t-esc="details['amount']"/>
+                                </th>
+                            </tr>
+                        </t>
+                        <tr t-if="category_details">
+                            <th colspan="3">
+                                <u>Category Wise Sales</u>
+                            </th>
+                        </tr>
+                        <t t-foreach="category_details" t-as="categ">
+                            <tr>
+                                <th>
+                                    <t t-esc="categ['category']"/>
+                                </th>
+                                <th></th>
+                                <th>
+                                    <t t-esc="categ['amount']"/>
+                                </th>
+                            </tr>
+                        </t>
+                    </table>
+                </div>
+            </main>
+        </t>
+    </template>
+
+
+    <record id="paperformat_z_report" model="report.paperformat">
+        <field name="name">Walkers Z Report</field>
+        <field name="format">A4</field>
+        <field name="orientation">Portrait</field>
+        <field name="margin_top">50</field>
+        <field name="margin_bottom">10</field>
+        <field name="margin_left">7</field>
+        <field name="margin_right">7</field>
+        <field name="header_line" eval="False"/>
+        <field name="header_spacing">40</field>
+        <field name="dpi">90</field>
+    </record>
+
+
+    <record id="action_report_z" model="ir.actions.report">
+        <field name="name">Z Report</field>
+        <field name="model">walkers.z.report</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">pt_walkers_z_report.report_z_walkers</field>
+        <field name="report_file">pt_walkers_z_report.report_z_walkers</field>
+        <field name="paperformat_id" ref="pt_walkers_z_report.paperformat_z_report"/>
+
+    </record>
+
+</odoo>

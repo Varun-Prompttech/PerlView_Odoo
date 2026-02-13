@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <t t-name="sh_pos_manager_validation.BarcodePopup">
+        <Dialog size="'sm'" title="props.title">
+            <div class="d-flex justify-content-center align-items-center">
+                <div>
+                    <img class="login-barcode-img" src="/sh_pos_manager_validation/static/src/img/barcode.png" style="height:80px; width:120px;" />
+                    <div class="login-barcode-text">Scan your badge</div>
+                </div>
+
+                <t t-set-slot="footer">
+                    <button class="button dont-show-again highlight btn btn-lg btn-primary w-auto" t-on-click="cancel">Cancel</button>
+                </t>
+            </div>
+        </Dialog>
+    </t>
+
+</templates>

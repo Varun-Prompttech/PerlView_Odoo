@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record id="purchase_request_add_analytic" model="ir.ui.view">
+        <field name="name">purchase_request_add_analytic</field>
+        <field name="model">purchase.request</field>
+        <field name="inherit_id" ref="purchase_request.view_purchase_request_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='assigned_to']" position="after">
+                <field name="analytic_account_id" widget="many2many_tags" required="1" readonly="state!='draft'"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

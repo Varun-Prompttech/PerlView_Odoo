@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+    <t t-name="sh_pos_all_in_one_retail.OrderListScreen" t-inherit="sh_pos_order_list.OrderListScreen" t-inherit-mode="extension">
+         <xpath expr="//tr[hasclass('sh_sub_order_line_tr')]//td[1]" position="attributes">
+            <attribute name="colspan">8</attribute>
+        </xpath>
+
+        <xpath expr="//th[hasclass('sh-actions')]" position="before">
+            <t t-if="pos.config.enable_partial_payment and pos.config.sh_allow_to_pay_order">
+                <th class="sh_partial_payment_amount_due_th">Amount Due</th>
+            </t>
+        </xpath>
+        <xpath expr="//td[hasclass('sh-actions')]" position="before">
+            <t t-set="pos_order" t-value="order"/>
+            <t t-if="pos.config.enable_partial_payment and pos.config.sh_allow_to_pay_order">
+                <td class="sh_partial_payment_amount_due_td">
+                    <t t-if="pos_order.state and pos_order.state == 'invoiced'">
+                        <t t-if="pos_order.sh_amount_residual > 0.00">
+                            <t t-esc="env.utils.formatCurrency(pos_order.sh_amount_residual)"/>
+                        </t>
+                        <t t-else="">
+                            <t t-esc="env.utils.formatCurrency(0)"/>
+                        </t>
+                    </t>
+                </td>
+            </t>
+        </xpath>
+        <xpath expr="//td[hasclass('sh-actions')]" position="inside">
+            <t t-if="pos.config.enable_partial_payment and pos.config.sh_allow_to_pay_order and pos_order.state and pos_order.state == 'invoiced'">
+                <t t-if="pos_order.sh_amount_residual > 0.00">
+                    <i class="fa fa-money" aria-hidden="true" t-on-click.stop="() => this.pay_pos_order(pos_order)"></i>
+                </t> 
+            </t>
+        </xpath>
+        <xpath expr="//select[hasclass('sh_pos_order_filter')]" position="inside">
+            <t t-if="pos.config.enable_partial_payment and pos.config.sh_allow_to_pay_order">
+                <option value="partial">Partially Paid</option>
+            </t>
+        </xpath>
+    </t>
+</templates>

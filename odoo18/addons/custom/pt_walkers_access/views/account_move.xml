@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record model="ir.ui.view" id="add_access_payment_button">
+        <field name="name">add_access_payment</field>
+        <field name="model">account.move</field>
+        <field name="inherit_id" ref="account.view_move_form"/>
+        <field name="arch" type="xml">
+            <!--                No Access For Pay Button If group_payment_button Is True-->
+            <xpath expr="//button[@id='account_invoice_payment_btn']" position="attributes">
+                <attribute name="groups">pt_walkers_access.group_payment_button</attribute>
+            </xpath>
+            <xpath expr="//button[@id='account_invoice_payment_secondary_btn']" position="attributes">
+                <attribute name="groups">pt_walkers_access.group_payment_button</attribute>
+            </xpath>
+            <!--                Given Two New Buttons To See Pay Button If Oustanding is present and outstanding is not present in Sales,Sale Refund,Purchase Refund,Receipt and Delivery-->
+            <xpath expr="//button[@id='account_invoice_payment_btn']" position="after">
+                <button name="action_register_payment" id="account_invoice_payment_btn_1"
+                        type="object" class="oe_highlight"
+                        invisible="(
+                                    state != 'posted'
+                                    or payment_state not in ('not_paid', 'partial', 'in_payment')
+                                    or move_type not in ('out_invoice', 'out_refund', 'in_refund', 'out_receipt', 'in_receipt')
+                                    or invoice_has_outstanding
+                                )"
+                        context="{'dont_redirect_to_payments': True, 'display_account_trust': True}"
+                        string="Pay" data-hotkey="g"
+                        groups="!pt_walkers_access.group_payment_button"/>
+
+                <button name="action_register_payment" id="account_invoice_payment_secondary_btn_2"
+                        type="object"
+                        invisible="(
+                                    state != 'posted'
+                                    or payment_state not in ('not_paid', 'partial', 'in_payment')
+                                    or move_type not in ('out_invoice', 'out_refund', 'in_refund', 'out_receipt', 'in_receipt')
+                                    or not invoice_has_outstanding
+                                )"
+                        context="{'dont_redirect_to_payments': True, 'display_account_trust': True}"
+                        string="Pay" data-hotkey="g"
+                        groups="!pt_walkers_access.group_payment_button"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

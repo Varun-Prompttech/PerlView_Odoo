@@ -1,0 +1,4 @@
+.border-invisible {
+  border: 1px solid transparent;
+  color:red !important;
+}

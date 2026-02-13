@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record model="product.product" id="partial_pay_product">
+        <field name="name">Partial</field>
+        <field name="type">service</field>
+        <field name="sale_ok" eval="True" />
+        <field name="available_in_pos" eval="True" />
+        <field name="sh_is_partial_pay_product" eval="True" />
+        <field name="taxes_id" eval='[(5,)]'/>
+        <field name="pos_categ_ids" model="pos.category" eval="[(6, 0, obj().search([], limit=1).ids)]" />
+        <field name="list_price" eval='0'/>
+    </record>
+</odoo>

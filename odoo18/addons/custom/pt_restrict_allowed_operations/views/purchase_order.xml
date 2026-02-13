@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record id="purchase_form_remove_domain" model="ir.ui.view">
+    <field name="name">purchase_form_remove_domain</field>
+    <field name="model">purchase.order</field>
+    <field name="inherit_id" ref="purchase_stock.purchase_order_view_form_inherit"/>  <!-- Inherit the existing view -->
+    <field name="arch" type="xml">
+        <!-- Override the field by removing the domain -->
+        <field name="picking_type_id" position="replace">
+                <field name="picking_type_id"  context="{'picking_type_id': 7}" options="{'no_create': True}" groups="stock.group_stock_multi_locations" readonly="state in ['cancel', 'done', 'purchase']"/>
+        </field>
+    </field>
+</record>
+
+</odoo>

@@ -1,0 +1,15 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_assessment_parameter_user,access_assessment_parameter_user,model_assessment_parameter,base.group_user,1,0,0,0
+access_assessment_parameter_officer,access_assessment_parameter_officer,model_assessment_parameter,hr.group_hr_user,1,1,1,1
+
+access_assessment_parameter_line_user,access_assessment_parameter_line_user,model_assessment_parameter_line,base.group_user,1,0,0,0
+access_assessment_parameter_line_officer,access_assessment_parameter_line_officer,model_assessment_parameter_line,hr.group_hr_user,1,1,1,1
+
+access_hr_assessments_user,access_hr_assessments_user,model_hr_assessments,base.group_user,1,0,0,0
+access_hr_assessments_officer,access_hr_assessments_officer,model_hr_assessments,hr.group_hr_user,1,1,1,1
+
+access_hr_assessments_line_user,access_hr_assessments_line_user,model_hr_assessments_line,base.group_user,1,0,0,0
+access_hr_assessments_line_officer,access_hr_assessments_line_officer,model_hr_assessments_line,hr.group_hr_user,1,1,1,1
+
+access_assessments_store_user,access_hr_assessments_store_user,model_assessment_store,base.group_user,1,0,0,0
+access_assessments_store_officer,access_hr_assessments_store_officer,model_assessment_store,hr.group_hr_user,1,1,1,1

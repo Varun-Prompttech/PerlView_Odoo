@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record id="res_users_allowed_operation" model="ir.ui.view">
+        <field name="name">res_users_allowed_operation</field>
+        <field name="model">res.users</field>
+        <field name="inherit_id" ref="base.view_users_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook/page[@name='account_security']" position="after">
+                <page name="custom" string="Custom">
+                    <group>
+                        <group>
+                            <field name="allowed_operation_types" widget="many2many_tags"/>
+                            <field name="default_picking_type"
+                                   options="{'no_quick_create': True, 'no_create_edit': True}"/>
+                        </group>
+                    </group>
+                </page>
+            </xpath>
+        </field>
+    </record>
+</odoo>
+
+        <!--<?xml version="1.0" encoding="UTF-8" ?>-->
+        <!--<odoo>-->
+        <!--    <record id="res_users_allowed_operation" model="ir.ui.view">-->
+        <!--        <field name="name">res_users_allowed_operation</field>-->
+        <!--        <field name="model">res.users</field>-->
+        <!--        <field name="inherit_id" ref="pt_analytic_custom.res_users_inherit_form"/>-->
+        <!--        <field name="arch" type="xml">-->
+        <!--            <xpath expr="//notebook/page[@name='custom_tab']//field[@name='default_analytic_account']" position="after">-->
+        <!--                <field name="allowed_operation_types" widget="many2many_tags"/>-->
+        <!--                <field name="default_picking_type" options="{'no_quick_create': True, 'no_create_edit': True}"/>-->
+        <!--            </xpath>-->
+        <!--        </field>-->
+        <!--    </record>-->
+        <!--</odoo>-->
