@@ -446,95 +446,56 @@ class OmaPaymentController(http.Controller):
         return {'success': False, 'error': 'Payment Timed Out (No response from terminal in 120 seconds)'}
 
     def _create_payment_and_complete(self, pos_order, payment_method, amount, ecr_result):
-        """Create payment for the order and validate it."""
+        """Create payment for the order and validate it.
+        
+        Uses standard Odoo ORM methods (matching the Adyen self-order controller pattern)
+        so that all hooks (KDS/Preparation Display, stock picking, etc.) are properly triggered.
+        """
         try:
             _logger.info("Completing order %s with amount %s", pos_order.name, amount)
             _logger.info("Order state: %s, amount_total: %s, amount_paid: %s", 
                         pos_order.state, pos_order.amount_total, pos_order.amount_paid)
 
-            # Build transaction details for storage
-            transaction_id = ecr_result.get('transaction_id', '')
-            card_type = ecr_result.get('card_type', 'OMA Card')
-            
-            # Create the payment
-            payment_vals = {
-                'pos_order_id': pos_order.id,
-                'payment_method_id': payment_method.id,
+            # Build payment data
+            payment_data = {
                 'amount': amount,
-                'transaction_id': transaction_id,
                 'payment_date': fields.Datetime.now(),
+                'payment_method_id': payment_method.id,
+                'transaction_id': ecr_result.get('transaction_id', ''),
+                'pos_order_id': pos_order.id,
             }
             
             # Add card info if available
-            if ecr_result.get('masked_pan'):
-                payment_vals['card_no'] = ecr_result.get('masked_pan')
             if ecr_result.get('card_type'):
-                payment_vals['card_type'] = ecr_result.get('card_type')
-            
-            _logger.info("Creating payment with vals: %s", payment_vals)
-            payment = request.env['pos.payment'].sudo().create(payment_vals)
-            
-            # Force flush to ensure payment is in DB
-            request.env['pos.payment'].flush_model()
-            request.env.cr.commit()  # Force commit to DB
-            
-            _logger.info("Payment created: ID %s, amount %s", payment.id, payment.amount)
-            
-            # Verify payment was actually created by re-reading from DB
-            verify_payment = request.env['pos.payment'].sudo().browse(payment.id)
-            _logger.info("Payment verification: exists=%s, order_id=%s, amount=%s", 
-                        verify_payment.exists(), verify_payment.pos_order_id.id if verify_payment.exists() else 'N/A',
-                        verify_payment.amount if verify_payment.exists() else 'N/A')
-            
-            # Verify via direct SQL - this is the source of truth
-            request.env.cr.execute("""
-                SELECT COALESCE(SUM(amount), 0) FROM pos_payment 
-                WHERE pos_order_id = %s
-            """, (pos_order.id,))
-            total_paid_sql = request.env.cr.fetchone()[0]
-            _logger.info("Total payments in DB for order %s: %s (order total: %s)", 
-                        pos_order.id, total_paid_sql, pos_order.amount_total)
-            
-            # Check if fully paid using SQL result (with tolerance)
-            if total_paid_sql >= (pos_order.amount_total - 0.05):
-                if pos_order.state == 'draft':
-                    # Directly update order state via SQL
-                    request.env.cr.execute("""
-                        UPDATE pos_order SET state = 'paid' WHERE id = %s AND state = 'draft'
-                    """, (pos_order.id,))
-                    request.env.cr.commit()
-                    
-                    # Invalidate cache and re-read
-                    pos_order.invalidate_recordset()
-                    pos_order = request.env['pos.order'].sudo().browse(pos_order.id)
-                    
-                    _logger.info("Order %s state set to 'paid' via SQL", pos_order.name)
-                    
-                    # Try to complete the order properly (create accounting entries, picking, etc.)
-                    try:
-                        # Call process_saved_order to trigger KOT, notifications etc.
-                        # draft=False means process normally
-                        pos_order._process_saved_order(False)
-                        _logger.info("Processed saved order %s", pos_order.name)
-                        
-                        # Trigger KOT/KDS update if available
-                        if hasattr(pos_order, 'send_table_count_notification') and pos_order.table_id:
-                            pos_order.send_table_count_notification(pos_order.table_id)
-                            
-                    except Exception as e:
-                        _logger.warning("Post-paid processing error: %s", str(e))
-                
-                _logger.info("Order %s successfully processed (state: %s)", pos_order.name, pos_order.state)
-            else:
-                 # ... (rest of the code)
+                payment_data['card_type'] = ecr_result.get('card_type')
+            if ecr_result.get('masked_pan'):
+                payment_data['card_no'] = ecr_result.get('masked_pan')
 
-                # Payment amount doesn't match - this shouldn't happen if we got here
-                diff = pos_order.amount_total - total_paid_sql
-                _logger.error("Payment mismatch: DB total paid=%s, order total=%s, diff=%s", 
-                             total_paid_sql, pos_order.amount_total, diff)
-                raise ValueError(f"Order {pos_order.name} payment mismatch (paid: {total_paid_sql}, total: {pos_order.amount_total})")
-            
-            _logger.info("Order %s successfully processed", pos_order.name)
+            # 1. Add payment using standard ORM method (updates amount_paid automatically)
+            pos_order.add_payment(payment_data)
+            _logger.info("Payment added to order %s, amount_paid: %s", pos_order.name, pos_order.amount_paid)
+
+            # 2. Mark order as paid using standard ORM method (validates amount and sets state)
+            pos_order.action_pos_order_paid()
+            _logger.info("Order %s marked as paid (state: %s)", pos_order.name, pos_order.state)
+
+            # 3. Trigger KDS / Preparation Display notification via _send_order()
+            #    This is the critical call - pos_self_order_preparation_display hooks into
+            #    _send_order() to call process_order() which notifies the Kitchen Display
+            pos_order._send_order()
+            _logger.info("Triggered _send_order for order %s (KDS/Preparation Display notified)", pos_order.name)
+
+            # 4. Create stock picking for inventory management
+            pos_order._create_order_picking()
+            pos_order._compute_total_cost_in_real_time()
+            _logger.info("Created order picking for %s", pos_order.name)
+
+            # 5. Generate invoice if configured
+            if pos_order.to_invoice and pos_order.state == 'paid':
+                pos_order._generate_pos_order_invoice()
+                _logger.info("Generated invoice for order %s", pos_order.name)
+
+            _logger.info("Order %s successfully completed (state: %s)", pos_order.name, pos_order.state)
 
         except Exception as e:
             _logger.exception("Error completing order %s: %s", pos_order.name, str(e))
