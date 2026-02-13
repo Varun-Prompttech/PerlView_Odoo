@@ -21,6 +21,7 @@
         'security/ir.model.access.csv',
         'views/oma_transaction_log_views.xml',
         'views/pos_config_views.xml',
+        'views/pos_payment_method_views.xml',
         'views/report_invoice_thermal.xml',
         'data/pos_payment_data.xml',
     ],

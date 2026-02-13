@@ -11,15 +11,23 @@
                 <group string="OMA Configuration" 
                        invisible="use_payment_terminal != 'oma'">
                     <group>
-                        <field name="oma_api_endpoint" placeholder="https://rps.omaemirates.ae"/>
-                        <field name="oma_merchant_id" placeholder="Merchant ID"/>
-                        <field name="oma_terminal_id" placeholder="Terminal ID"/>
+                        <field name="oma_auto_confirm" widget="boolean_toggle"/>
+                        <field name="oma_api_endpoint" placeholder="https://rps.omaemirates.ae"
+                               invisible="oma_auto_confirm"/>
+                        <field name="oma_merchant_id" placeholder="Merchant ID"
+                               invisible="oma_auto_confirm"/>
+                        <field name="oma_terminal_id" placeholder="Terminal ID"
+                               invisible="oma_auto_confirm"/>
                     </group>
                     <group>
-                        <field name="oma_secret_key" placeholder="Secret Key" password="True"/>
-                        <field name="oma_key_version" placeholder="Key Version"/>
-                        <field name="oma_institute" placeholder="Institute"/>
-                        <field name="oma_serial_number" placeholder="Serial Number"/>
+                        <field name="oma_secret_key" placeholder="Secret Key" password="True"
+                               invisible="oma_auto_confirm"/>
+                        <field name="oma_key_version" placeholder="Key Version"
+                               invisible="oma_auto_confirm"/>
+                        <field name="oma_institute" placeholder="Institute"
+                               invisible="oma_auto_confirm"/>
+                        <field name="oma_serial_number" placeholder="Serial Number"
+                               invisible="oma_auto_confirm"/>
                     </group>
                 </group>
             </xpath>

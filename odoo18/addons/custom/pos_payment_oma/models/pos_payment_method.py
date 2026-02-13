@@ -48,6 +48,12 @@ class PosPaymentMethod(models.Model):
         string='Serial Number',
         help='Serial Number of the POS device'
     )
+    oma_auto_confirm = fields.Boolean(
+        string='Auto Confirm Payment (Test Mode)',
+        default=False,
+        help='When enabled, payments are auto-approved without contacting the OMA terminal. '
+             'Use this for testing only. Disable for production/go-live.'
+    )
 
     @api.model
     def _load_pos_self_data_domain(self, data):
