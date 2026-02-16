@@ -3,3 +3,5 @@ from . import res_config_settings
 from . import pos_payment_method
 from . import pos_config
 from . import oma_transaction_log
+from . import hr_employee
+from . import pos_session
