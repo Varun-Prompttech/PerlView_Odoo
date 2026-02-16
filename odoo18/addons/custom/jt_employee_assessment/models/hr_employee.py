@@ -33,10 +33,3 @@ class HREmployee(models.Model):
             'domain': [('employee_id', '=', self.id)],
             'context': {'default_employee_id': self.id},
         }
-
-
-class HrEmployeePublic(models.Model):
-    _inherit = 'hr.employee.public'
-
-    assessment_template_id = fields.Many2one(
-        related='employee_id.assessment_template_id', readonly=True)

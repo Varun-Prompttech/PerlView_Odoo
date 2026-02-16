@@ -68,13 +68,10 @@ patch(ConfirmationPage.prototype, {
     },
 
     /**
-     * Manual retry
+     * Manual retry - reuse the same iframe logic
      */
-    printInvoiceBrowser() {
-        const token = this.props.orderAccessToken;
-        if (token) {
-            window.open(`/pos_payment_oma/receipt_html/${token}`, '_blank');
-        }
+    async printInvoiceBrowser() {
+        await this.autoPrintReceipt();
     },
 
     /**
